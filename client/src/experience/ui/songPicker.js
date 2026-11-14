@@ -1,5 +1,8 @@
 import './songPicker.css';
 
+// Builds the song picker inside `container`.
+// `onSongChosen` is a function the rest of the app passes in. The picker will
+// call it once the user has picked or uploaded a song
 export function createSongPicker(container, { onSongChosen }) {
   container.innerHTML = `
     <section class="song-picker">
@@ -14,19 +17,24 @@ export function createSongPicker(container, { onSongChosen }) {
     </section>
   `;
 
+  // Grab the elements we need to read from or change later.
   const input = container.querySelector('.song-picker__input');
   const status = container.querySelector('.song-picker__status');
   const results = container.querySelector('.song-picker__results');
-  const uploadButton = container.querySelector('.song-picker__upload');
-  const fileInput = container.querySelector('.song-picker__file');
+  const uploadButton = container.querySelector('.song-picker__upload'); 
+  const fileInput = container.querySelector('.song-picker__file');      
 
-  // Draws one row per song. Uses textContent so song titles can never run as HTML.
+  // Clears the results list and draws one row per song.
+  // Song titles come from Deezer, so we set them with textContent, never
+  // innerHTML. textContent always treats them as plain text, so a title that
+  // happened to contain HTML or a script could not run on our page.
   function renderResults(songs) {
-    results.replaceChildren();
+    results.replaceChildren(); // called with nothing, this empties the list
+
     for (const song of songs) {
       const cover = document.createElement('img');
       cover.className = 'song-picker__cover';
-      cover.alt = '';
+      cover.alt = ''; // the cover is decoration, so screen readers should skip it
       if (song.cover) cover.src = song.cover;
 
       const title = document.createElement('span');
@@ -41,6 +49,8 @@ export function createSongPicker(container, { onSongChosen }) {
       text.className = 'song-picker__text';
       text.append(title, artist);
 
+      // Each row is a real <button>, so it can be reached with the Tab key
+      // and pressed with Enter without us writing any extra code.
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'song-picker__row';
@@ -52,10 +62,68 @@ export function createSongPicker(container, { onSongChosen }) {
     }
   }
 
-  // TEMPORARY: fake songs to see what the UI looks like. Remove this when you implement the search feature.
-  renderResults([
-    { id: 1, title: 'Example Song', artist: 'Example Artist', cover: '' },
-    { id: 2, title: 'Another Song With A Much Longer Title', artist: 'Someone Else', cover: '' },
-  ]);
+  // Sets the message under the search box and redraws the list.
+  // Leaving out `songs` clears the list.
+  function show(message, songs = []) {
+    status.textContent = message;
+    renderResults(songs);
+  }
 
+  function showSongs(songs) {
+    if (songs.length) show('', songs);
+    else show('No songs found.');
+  }
+
+  // ---- Live search ----
+  // Sending a request on every key press would be wasteful and could hit
+  // Deezer's rate limit. So we "debounce": wait until the user has stopped
+  // typing for a quarter of a second, then search once.
+
+  let timer;      // the countdown that is waiting for the user to pause
+  let controller; // lets us cancel a request that has already been sent
+
+  // Searches we have already done, stored as text → songs. When the user
+  // deletes a character we can show the earlier results without a new request.
+  const cache = new Map();
+
+  // The 'input' event fires on every change to the box: typing, deleting, pasting.
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+
+    // The text changed, so anything still in progress is for old text. Stop
+    // the countdown and cancel the request. Without the cancel, a slow reply
+    // for "daf" could arrive late and replace the results for "daft punk".
+    // (`?.` means "only do this if controller exists", as it is empty at first.)
+    clearTimeout(timer);
+    controller?.abort();
+
+    if (q.length < 2) return show('Type at least 2 characters to search.');
+    if (cache.has(q)) return showSongs(cache.get(q));
+
+    // Only the message changes here. The old results stay on screen until the
+    // new ones arrive, so the list does not flicker while the user types.
+    status.textContent = 'Searching…';
+
+    timer = setTimeout(async () => {
+      controller = new AbortController();
+      try {
+        // encodeURIComponent makes the text safe to put in a URL
+        // (for example, a space becomes %20 and & becomes %26).
+        const res = await fetch(`/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+
+        // fetch only fails by itself when the network is down. A reply like
+        // "502 error" still counts as a reply, so we have to check for it.
+        if (!res.ok) throw new Error(`Search failed with status ${res.status}`);
+
+        const songs = await res.json();
+        cache.set(q, songs);
+        showSongs(songs);
+      } catch (err) {
+        // Cancelling a request makes fetch throw an 'AbortError'. We caused
+        // that on purpose, so it is not a real failure and we ignore it.
+        if (err.name === 'AbortError') return;
+        show('Search failed. Check your connection and try again.');
+      }
+    }, 250);
+  });
 }
