@@ -12,7 +12,7 @@
 // How: the triangles are sorted into a grid on the 6 faces of a cube around the planet. A query looks only at the
 // few triangles in its grid cell, finds the one the direction passes through, and intersects it.
 
-const GRID = 48;    // cells per cube face edge: about 10 triangles per cell at ~52k triangles
+const GRID = 60;    // cells per cube face edge: about 10 triangles per cell at ~85k triangles
 const REACH = 0.3;  // a triangle is filed under a cube face if all its corners are at least this far "in front" of it
 
 // The 6 cube faces: [major axis, sign, the two other axes]

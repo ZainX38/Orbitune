@@ -20,7 +20,7 @@ import { createSurface } from './surface.js';
 import { createIcosphere } from './sphere.js';
 import { fbm } from './noise.js';
 
-const DETAIL = 50; // icosphere subdivisions: 20 * (DETAIL+1)^2 faces (~52k). Lower if slow (40 = ~34k).
+const DETAIL = 64; // icosphere subdivisions: 20 * (DETAIL+1)^2 faces (~85k). Lower if slow (50 = ~52k, 40 = ~34k).
 const SUN_FOLLOWS_LISTENER = true; // the sun stays ahead (east) of the listener, so where you are is always lit
 
 export function createPlanet(features, blueprint) {
