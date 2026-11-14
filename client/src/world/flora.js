@@ -149,9 +149,11 @@ export function createFlora(terrain, blueprint, pal, colours, reactive, total = 
       near.set(dir.x + dir.z * 0.012, dir.y, dir.z - dir.x * 0.012).normalize();
       if (stepUp > 0.42 || Math.abs(terrain.getHeight(near) - h) > 0.42) continue;
 
-      p.copy(dir).multiplyScalar(RADIUS + h - 0.12); // slightly sunk, so no gaps on slopes
-      q.setFromUnitVectors(UP, dir).multiply(spin.setFromAxisAngle(UP, rng() * Math.PI * 2));
       const k = shape.scale[0] + rng() * (shape.scale[1] - shape.scale[0]);
+      // h is the exact mesh height under the trunk's centre. Sink the base by what its own width can hang over
+      // the downhill side of the steepest slope allowed above, so there is never a gap under it.
+      p.copy(dir).multiplyScalar(RADIUS + h - 0.14 * k);
+      q.setFromUnitVectors(UP, dir).multiply(spin.setFromAxisAngle(UP, rng() * Math.PI * 2));
       s.set(k, k * (0.85 + rng() * 0.3), k);
       m.compose(p, q, s);
       mesh.setMatrixAt(placed++, m);

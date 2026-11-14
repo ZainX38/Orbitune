@@ -16,6 +16,7 @@ import { createReactive } from './reactive.js';
 import { createClouds } from './clouds.js';
 import { createFlora } from './flora.js';
 import { placeLandmarks } from './landmarks.js';
+import { createSurface } from './surface.js';
 import { fbm, makeRng } from './noise.js';
 
 const DETAIL = 50; // icosphere subdivisions: 20 * (DETAIL+1)^2 faces (~52k). Lower if slow (40 = ~34k).
@@ -84,6 +85,12 @@ export function createPlanet(features, blueprint) {
   ground.name = 'ground';
   group.add(ground);
 
+  // CONTRACT 3 is answered from the finished mesh, not from the height function: the function is only sampled at
+  // the vertices, and between them the flat triangles differ from it by up to 0.8 units (see surface.js).
+  // Everything that stands on the ground (flora, landmarks, the player) uses this, so it touches what is drawn.
+  const { getHeight } = createSurface(pos, RADIUS);
+  const land = { ...terrain, getHeight };
+
   // ---------- Everything on and around it ----------
   // The song's own colour (Role 2), pulled towards the palette so the glow always suits the planet
   const glowColour = colours.atmosphere.clone().lerp(pal.night ? pal.peaks : pal.sky, 0.45);
@@ -93,10 +100,10 @@ export function createPlanet(features, blueprint) {
   const clouds = createClouds(RADIUS, terrain.seed, pal.cloud, reactive);
   group.add(clouds.group);
 
-  const flora = createFlora(terrain, blueprint, pal, colours, reactive);
+  const flora = createFlora(land, blueprint, pal, colours, reactive);
   group.add(flora.group);
 
-  const landmarks = placeLandmarks(group, terrain, blueprint, pal.peaks);
+  const landmarks = placeLandmarks(group, land, blueprint, pal.peaks);
 
   // ---------- Sun (lives in the planet's group, so it turns with the planet) ----------
   const sun = new THREE.DirectionalLight(pal.sun, pal.sunIntensity);
@@ -161,7 +168,7 @@ export function createPlanet(features, blueprint) {
     '| flora:', flora.kinds.join(' + '), pal.night ? '| night planet' : '| day planet');
 
   return {
-    group, getHeight: terrain.getHeight, radius: RADIUS, landmarks, colours, onBeat, update, name: blueprint.planetName,
+    group, getHeight, radius: RADIUS, landmarks, colours, onBeat, update, name: blueprint.planetName,
     dispose, timeAt, directionAt, duration: features.duration, seaLevel: terrain.seaLevel, sun,
   };
 }
