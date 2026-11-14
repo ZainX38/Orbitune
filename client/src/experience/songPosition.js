@@ -40,6 +40,9 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
   let lastTime = 0;      // song time at the previous update (for firing beats)
   let logTimer = 0;
   let listenerTime = 0;
+  // TEMP TRACE (remove after the repeat bug is fixed)
+  let live = 0, traceTimer = 0;
+  const trace = (...a) => console.log('[song-trace]', ...a);
 
   // Song time at a given context time
   const timeAt = (when) => (voice ? mod(voice.offset + (when - voice.startedAt), duration) : pausedAt);
@@ -55,6 +58,8 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     gain.gain.linearRampToValueAtTime(1, when + FADE);
     source.connect(gain).connect(master);
     source.start(when, mod(offset, duration));
+    live++;
+    trace(`source START at ctx ${when.toFixed(3)} offset ${mod(offset, duration).toFixed(2)}s | live sources ${live}`);
 
     if (voice) {
       const old = voice;
@@ -62,7 +67,8 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
       old.gain.gain.setValueAtTime(old.gain.gain.value, when);
       old.gain.gain.linearRampToValueAtTime(0, when + FADE);
       old.source.stop(when + FADE + 0.02);
-      old.source.onended = () => { old.source.disconnect(); old.gain.disconnect(); };
+      trace(`source STOP scheduled at ctx ${(when + FADE + 0.02).toFixed(3)}`);
+      old.source.onended = () => { old.source.disconnect(); old.gain.disconnect(); live--; trace(`source ENDED | live sources ${live}`); };
     }
     voice = { source, gain, startedAt: when, offset: mod(offset, duration) };
     lastJump = when;
@@ -111,6 +117,7 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
         if (Math.abs(ahead) > bar / 2) {
           const bars = Math.round(ahead / bar);
           const target = mod(time + bars * bar, duration);
+          trace(`JUMP target ${target.toFixed(2)}s from playback ${time.toFixed(2)}s (listener ${listenerTime.toFixed(2)}s, bar ${bar.toFixed(2)}s)`);
           log(`jump ${bars > 0 ? '+' : ''}${bars} bar(s): ${time.toFixed(2)}s -> ${target.toFixed(2)}s (listener at ${listenerTime.toFixed(2)}s)`);
           play(target);
           lastTime = time = target;
@@ -119,6 +126,13 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     }
 
     fireBeats(time);
+
+    traceTimer += dt;
+    if (voice && traceTimer >= 0.5) {
+      traceTimer = 0;
+      const gap = mod(listenerTime - time + duration / 2, duration) - duration / 2;
+      trace(`mode ${free ? 'free' : 'surface'} | listener lon ${(listenerTime / duration).toFixed(3)} = ${listenerTime.toFixed(2)}s | playback ${time.toFixed(2)}s | listener-playback ${gap.toFixed(2)}s | ctx ${ctx.currentTime.toFixed(2)} | live ${live}`);
+    }
 
     logTimer += dt;
     if (DEBUG && voice && logTimer >= 2) {
