@@ -1,10 +1,10 @@
 # Orbitune: Project Context
 
-I am Role ?: <your name>. Currently working on: <e.g. "terrain displacement from AudioFeatures in world/terrain.js">`
+I am RoleMohammad. Currently working on: Experience first person walk 3D/firstPerson.js"
 
 ## Instructions for the AI assistant reading this
  
-You're helping one member of a 4-person hackathon team build **Polyphonia**. Read the edited line above first. Then:
+You're helping one member of a 4-person hackathon team build **Orbitunes**. Read the edited line above first. Then:
  
 1. Guide them on **their role and current task only**. Stay inside their folder unless they ask otherwise.
 2. **Never change the shared contracts** (Blueprint, AudioFeatures, getHeight) on your own. If a change is needed, tell them to agree it with the team first.
@@ -16,7 +16,7 @@ You're helping one member of a 4-person hackathon team build **Polyphonia**. Rea
  
 ## The project
  
-**Polyphonia turns any song into a low-poly planet you can explore in first person.** The terrain is shaped by the music's frequencies. The atmosphere's colour comes from the song's spectrum, treated like a planet's absorption spectrum. The biome, landmarks and lore come from Gemini listening to the song. An ElevenLabs narrator tells each landmark's story.
+**Orbitunes turns any song into a low-poly planet you can explore in first person.** The terrain is shaped by the music's frequencies. The atmosphere's colour comes from the song's spectrum, treated like a planet's absorption spectrum. The biome, landmarks and lore come from Gemini listening to the song. An ElevenLabs narrator tells each landmark's story.
  
 - **Tagline:** Every song is a world. Go explore it.
 - **Target challenge:** Marshall Wace, "New Worlds" (build something that opens a door to the unexplored).
