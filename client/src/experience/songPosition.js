@@ -1,4 +1,4 @@
-// Position controls the music: the listener's LONGITUDE on the planet decides which part of the song plays.
+// Position and music: the listener's LONGITUDE on the planet is a place in the song.
 // (Longitude = song time: the song runs once around the equator, eastwards. planet.timeAt(direction) does the maths.)
 //
 //   const song = createSongPosition({ audioContext, audioBuffer, features, planet, onBeat });
@@ -8,86 +8,115 @@
 //   song.dispose();
 //
 // How it behaves on the surface (free = false):
-//   The music always plays at normal speed. The listener's position is the centre of a window ONE BAR long.
-//   When the music runs out of that window it jumps back by a whole number of bars, so it stays in time:
-//     - standing still      -> the bar around you loops
-//     - walking east at the song's speed -> the window moves with the music: it just plays forward
-//     - walking east slower -> plays forward, repeating a bar now and then. Walking west -> steps back bar by bar
-//     - landing somewhere else -> jumps to that part of the song (to the nearest bar, still on the beat)
-//   Every jump is a short crossfade between two players, so there are no clicks or pops.
+//   The music ALWAYS plays forward at normal speed. It never loops a bar and it never jumps by itself.
+//     - landing            -> nothing changes: the song carries on. The landing spot becomes the "anchor".
+//     - standing still     -> the song keeps playing. (Show planet.directionAt(songTime) to the player: the playhead.)
+//     - walking            -> once you are more than RESYNC_AFTER seconds of song away from the anchor, the music
+//                             crossfades to where you stand now, and that spot becomes the new anchor.
+//   What counts is how far YOU moved, not how far the music has run: the music travels round the planet several
+//   times faster than a walk, so "music too far from me" would be true all the time and would bring the loop back.
+//   A re-sync moves the music by a whole number of beats, so the rhythm carries on without a stumble.
+//
+// One sound source plays at a time. Only during a crossfade (FADE seconds) there are two.
 
-const FADE = 0.06;          // seconds, crossfade length
-const MIN_JUMP_GAP = 0.25;  // seconds between two jumps
+const FADE = 0.15;           // seconds, crossfade length
+const RESYNC_AFTER = 1.5;    // seconds of song the listener has to move away from the anchor before the music follows
+const MIN_RESYNC_GAP = 1.0;  // seconds between two re-syncs (near the poles a few steps cross many longitudes)
 const DEBUG = true;
 
 const mod = (a, n) => ((a % n) + n) % n;
+
+// Equal-power fade curves: two unrelated parts of the song keep the same loudness through the crossfade
+const CURVE_IN = Float32Array.from({ length: 32 }, (_, i) => Math.sin((i / 31) * Math.PI / 2));
+const CURVE_OUT = Float32Array.from({ length: 32 }, (_, i) => Math.cos((i / 31) * Math.PI / 2));
 
 export function createSongPosition({ audioContext, audioBuffer, features, planet, onBeat, volume = 0.9 }) {
   const ctx = audioContext;
   const duration = audioBuffer.duration;
   const beats = features.beats ?? [];
-  const bar = Math.min(duration / 4, (4 * 60) / (features.bpm || 120)); // 4 beats
+  const beat = 60 / (features.bpm || 120); // seconds
   const log = (...a) => DEBUG && console.log('[song]', ...a);
+  const around = (d) => mod(d + duration / 2, duration) - duration / 2; // a difference in song time, shortest way round
 
   const master = ctx.createGain();
   master.gain.value = volume;
   master.connect(ctx.destination);
 
-  let voice = null;      // what is playing now: { source, gain, startedAt (context time), offset (song time) }
-  let pausedAt = 0;      // song time to start from
+  const voices = new Set(); // every source that still exists: the one playing + any that are fading out
+  let voice = null;         // what is playing now: { source, gain, startedAt (context time), offset (song time) }
+  let pausedAt = 0;         // song time to start from
   let free = true;
+  let anchor = null;        // the listener's song time at the last sync (null = take it from the next update)
   let lastJump = -1;
-  let lastTime = 0;      // song time at the previous update (for firing beats)
+  let lastTime = 0;         // song time at the previous update (for firing beats)
   let logTimer = 0;
   let listenerTime = 0;
   // TEMP TRACE (remove after the repeat bug is fixed)
-  let live = 0, traceTimer = 0;
+  let traceTimer = 0;
   const trace = (...a) => console.log('[song-trace]', ...a);
 
   // Song time at a given context time
   const timeAt = (when) => (voice ? mod(voice.offset + (when - voice.startedAt), duration) : pausedAt);
 
-  // Start a new player at `offset` and fade the old one out underneath it
+  // Fade a voice out and stop it. Its onended (below) then disconnects it.
+  function release(v, when) {
+    if (v.stopping) return;
+    v.stopping = true;
+    const g = v.gain.gain, from = g.value;
+    g.cancelScheduledValues(when);
+    try {
+      g.setValueCurveAtTime(CURVE_OUT.map((x) => x * from), when, FADE);
+    } catch { // a fade-in still running at `when`: fall back to a straight ramp
+      g.setValueAtTime(from, when);
+      g.linearRampToValueAtTime(0, when + FADE);
+    }
+    v.source.stop(when + FADE + 0.02);
+    trace(`source STOP scheduled at ctx ${(when + FADE + 0.02).toFixed(3)}`);
+  }
+
+  // Start a new source at `offset` and fade every other one out underneath it
   function play(offset) {
     const when = ctx.currentTime;
+    for (const v of voices) release(v, when);
+
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
     source.loop = true; // the end of the clip meets its start, like the equator
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0, when);
-    gain.gain.linearRampToValueAtTime(1, when + FADE);
+    gain.gain.value = 0;
+    gain.gain.setValueCurveAtTime(CURVE_IN, when, FADE);
     source.connect(gain).connect(master);
     source.start(when, mod(offset, duration));
-    live++;
-    trace(`source START at ctx ${when.toFixed(3)} offset ${mod(offset, duration).toFixed(2)}s | live sources ${live}`);
 
-    if (voice) {
-      const old = voice;
-      old.gain.gain.cancelScheduledValues(when);
-      old.gain.gain.setValueAtTime(old.gain.gain.value, when);
-      old.gain.gain.linearRampToValueAtTime(0, when + FADE);
-      old.source.stop(when + FADE + 0.02);
-      trace(`source STOP scheduled at ctx ${(when + FADE + 0.02).toFixed(3)}`);
-      old.source.onended = () => { old.source.disconnect(); old.gain.disconnect(); live--; trace(`source ENDED | live sources ${live}`); };
-    }
-    voice = { source, gain, startedAt: when, offset: mod(offset, duration) };
+    const v = { source, gain, startedAt: when, offset: mod(offset, duration), stopping: false };
+    source.onended = () => {
+      source.disconnect(); gain.disconnect();
+      voices.delete(v);
+      trace(`source ENDED | live sources ${voices.size}`);
+    };
+    voices.add(v);
+    voice = v;
     lastJump = when;
+    trace(`source START at ctx ${when.toFixed(3)} offset ${v.offset.toFixed(2)}s | live sources ${voices.size}`);
   }
 
   function start() {
     if (ctx.state === 'suspended') ctx.resume();
-    if (!voice) { play(pausedAt); log(`playing from ${pausedAt.toFixed(2)}s | one bar = ${bar.toFixed(2)}s | ${features.bpm} bpm`); }
+    if (!voice) { play(pausedAt); log(`playing from ${pausedAt.toFixed(2)}s | one beat = ${beat.toFixed(2)}s | ${features.bpm} bpm`); }
   }
 
   // Jump straight to a song time (crossfaded)
   function seek(time) {
     if (voice) play(time); else pausedAt = mod(time, duration);
     lastTime = mod(time, duration);
+    anchor = null;
   }
 
+  // free = true: orbit, the position is ignored. free = false: surface. Switching never touches what is playing.
   function setFree(value) {
-    if (free !== value) log(value ? 'free play (orbit)' : 'position controls the music (surface)');
+    if (free !== value) log(value ? 'free play (orbit)' : 'surface: the song plays on, and follows you when you walk away');
     free = value;
+    anchor = null; // wherever the listener is at the next update is the new starting point
   }
 
   // Fire onBeat for every beat between the previous update and now (not across jumps)
@@ -96,10 +125,7 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     const wrapped = step < 0 && step + duration < 0.5; // ran over the end of the clip
     if (onBeat && ((step > 0 && step < 0.5) || wrapped)) {
       for (const b of beats) {
-        if (wrapped ? b > lastTime || b <= time : b > lastTime && b <= time) {
-          onBeat(b);
-          if (DEBUG) console.log(`[song] beat at ${b.toFixed(2)}s`);
-        }
+        if (wrapped ? b > lastTime || b <= time : b > lastTime && b <= time) onBeat(b);
       }
     }
     lastTime = time;
@@ -112,13 +138,16 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
 
     if (!free && listenerDirection) {
       listenerTime = planet.timeAt(listenerDirection);
-      if (voice && ctx.currentTime - lastJump > MIN_JUMP_GAP) {
-        const ahead = mod(listenerTime - time + duration / 2, duration) - duration / 2; // listener minus music, shortest way round
-        if (Math.abs(ahead) > bar / 2) {
-          const bars = Math.round(ahead / bar);
-          const target = mod(time + bars * bar, duration);
-          trace(`JUMP target ${target.toFixed(2)}s from playback ${time.toFixed(2)}s (listener ${listenerTime.toFixed(2)}s, bar ${bar.toFixed(2)}s)`);
-          log(`jump ${bars > 0 ? '+' : ''}${bars} bar(s): ${time.toFixed(2)}s -> ${target.toFixed(2)}s (listener at ${listenerTime.toFixed(2)}s)`);
+      if (anchor === null) anchor = listenerTime;
+      const moved = around(listenerTime - anchor);
+      if (voice && Math.abs(moved) > RESYNC_AFTER && ctx.currentTime - lastJump > MIN_RESYNC_GAP) {
+        // Bring the music to the listener, moving it by whole beats so it stays in time
+        const shift = Math.round(around(listenerTime - time) / beat) * beat;
+        trace(`RESYNC listener moved ${moved.toFixed(2)}s from anchor ${anchor.toFixed(2)}s | playback ${time.toFixed(2)}s -> target ${mod(time + shift, duration).toFixed(2)}s (listener ${listenerTime.toFixed(2)}s)`);
+        anchor = listenerTime;
+        if (shift !== 0) {
+          const target = mod(time + shift, duration);
+          log(`re-sync: ${time.toFixed(2)}s -> ${target.toFixed(2)}s (listener at ${listenerTime.toFixed(2)}s)`);
           play(target);
           lastTime = time = target;
         }
@@ -130,8 +159,7 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     traceTimer += dt;
     if (voice && traceTimer >= 0.5) {
       traceTimer = 0;
-      const gap = mod(listenerTime - time + duration / 2, duration) - duration / 2;
-      trace(`mode ${free ? 'free' : 'surface'} | listener lon ${(listenerTime / duration).toFixed(3)} = ${listenerTime.toFixed(2)}s | playback ${time.toFixed(2)}s | listener-playback ${gap.toFixed(2)}s | ctx ${ctx.currentTime.toFixed(2)} | live ${live}`);
+      trace(`mode ${free ? 'free' : 'surface'} | listener lon ${(listenerTime / duration).toFixed(3)} = ${listenerTime.toFixed(2)}s | anchor ${anchor === null ? '-' : anchor.toFixed(2) + 's'} | playback ${time.toFixed(2)}s | ctx ${ctx.currentTime.toFixed(2)} | live ${voices.size}`);
     }
 
     logTimer += dt;
@@ -144,15 +172,15 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
   }
 
   function dispose() {
-    if (voice) {
-      const when = ctx.currentTime;
-      voice.gain.gain.cancelScheduledValues(when);
-      voice.gain.gain.setValueAtTime(voice.gain.gain.value, when);
-      voice.gain.gain.linearRampToValueAtTime(0, when + FADE);
-      voice.source.stop(when + FADE + 0.02);
-      voice = null;
-    }
-    setTimeout(() => master.disconnect(), 300);
+    const when = ctx.currentTime;
+    for (const v of voices) release(v, when);
+    voice = null;
+    // Whatever happens to the sources (a suspended context never fires onended), nothing reaches the speakers after this
+    setTimeout(() => {
+      for (const v of voices) { try { v.source.stop(); } catch { /* already stopped */ } v.source.disconnect(); v.gain.disconnect(); }
+      voices.clear();
+      master.disconnect();
+    }, (FADE + 0.1) * 1000);
   }
 
   return {
@@ -160,6 +188,7 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     get time() { return timeAt(ctx.currentTime); },
     get playing() { return !!voice && ctx.state === 'running'; },
     get free() { return free; },
-    duration, bar,
+    get sources() { return voices.size; }, // 1 while playing, 2 only during a crossfade
+    duration, beat,
   };
 }

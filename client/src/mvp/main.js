@@ -282,7 +282,7 @@ function land(localDirection) {
   const toPos = camera.position.clone(), toQuat = camera.quaternion.clone();
   camera.position.copy(fromPos); camera.quaternion.copy(fromQuat); // ...and then start from where we were
 
-  music.setFree(false); // from now on the landing spot decides what plays: the music jumps there right away
+  music.setFree(false); // the song carries on untouched. It only follows the player once they walk away from here
   console.log(`[mvp] landing at longitude ${(planet.timeAt(localDirection) / planet.duration).toFixed(3)} = song time ${planet.timeAt(localDirection).toFixed(2)}s`);
 
   move = {
