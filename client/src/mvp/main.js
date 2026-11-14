@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPlanet } from '../world/planet.js';
-import { createPlayer } from '../experience/player.js';
+import { createPlayer, PLAYER_SCALE } from '../experience/player.js';
 import { createSongPosition } from '../experience/songPosition.js';
 import { analyseSong } from './tempAnalysis.js';
 import { DEMO_SONGS, makeBlueprint } from './demoBlueprints.js';
@@ -16,8 +16,17 @@ import { DEMO_SONGS, makeBlueprint } from './demoBlueprints.js';
 const LAND_TIME = 1.5;      // seconds, orbit -> surface
 const TAKEOFF_TIME = 1.2;   // seconds, surface -> orbit
 const ORBIT_DISTANCE = 150; // camera distance from the planet centre
-const LANDMARK_RANGE = 12;  // come this close to a landmark to trigger it
-const FOG_NEAR = 20, FOG_FAR = 140;
+const LANDMARK_RANGE = 12 * PLAYER_SCALE; // come this close to a landmark to trigger it (scales with the player, see player.js)
+// Surface fog. From eyes 0.6 above a planet of radius 50 the bare horizon is only ~8 units away and the furthest
+// mountain tops and clouds you can see at all are ~55 away, so the fog has to work inside that range: it starts
+// just before the horizon and is almost solid where the furthest things appear. That haze is what makes hills
+// read as far away. (The old 20..140 ended beyond anything visible, so it did close to nothing.)
+const FOG_NEAR = 5, FOG_FAR = 75;
+const FOG_OFF_NEAR = 600, FOG_OFF_FAR = 1800; // orbit: further than the camera can ever be from the planet = no fog
+// Near plane: a fixed share of the camera's height above the ground. Close to the ground it must be tiny (the eye is
+// 0.6 up, slopes and trees come closer still). From orbit it must be big, or the depth buffer runs out of precision
+// and far surfaces flicker. One rule for both, so nothing jumps on the way down.
+const NEAR_PER_HEIGHT = 0.06, NEAR_MIN = 0.05 * PLAYER_SCALE, NEAR_MAX = 1;
 const CLICK_SLOP = 5;       // px the mouse may move and still count as a click
 const HINTS = {
   loading: 'Listening to the song…',
@@ -35,9 +44,13 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; // believable light: bright 
 renderer.toneMappingExposure = 1.0;
 document.body.prepend(renderer.domElement);
 
+const SPACE = new THREE.Color('#05060d');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#05060d');
-const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 3000);
+scene.background = SPACE;
+// The fog object always exists (in orbit it is just too far away to do anything). Adding and removing it would make
+// three.js rebuild every shader at the moment you click to land: a visible hitch.
+scene.fog = new THREE.Fog(SPACE, FOG_OFF_NEAR, FOG_OFF_FAR);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, NEAR_MAX, 3000);
 camera.position.set(0, 45, ORBIT_DISTANCE).setLength(ORBIT_DISTANCE);
 // No lights here: the planet brings its own sun and sky light.
 
@@ -126,16 +139,36 @@ function applyLook() {
   const { space, sky, fog } = planet.colours;
   stars.material.opacity = 1 - look;
   stars.visible = look < 1;
-  if (look <= 0) {
-    scene.background = space;
-    scene.fog = null;
-    return;
-  }
-  scene.background = look >= 1 ? sky : background.copy(space).lerp(sky, look);
-  if (!scene.fog) scene.fog = new THREE.Fog(fog, FOG_NEAR, FOG_FAR);
+  scene.background = look <= 0 ? space : look >= 1 ? sky : background.copy(space).lerp(sky, look);
   scene.fog.color.copy(fog); // live: the planet re-tints it every frame
-  scene.fog.near = THREE.MathUtils.lerp(400, FOG_NEAR, look); // far away at first, so nothing pops
-  scene.fog.far = THREE.MathUtils.lerp(1200, FOG_FAR, look);
+  scene.fog.near = THREE.MathUtils.lerp(FOG_OFF_NEAR, FOG_NEAR, look); // far away at first, so nothing pops
+  scene.fog.far = THREE.MathUtils.lerp(FOG_OFF_FAR, FOG_FAR, look);
+}
+
+// The view with no planet (while a song loads): plain space seen from orbit distance.
+// Without this, switching songs on the surface left the old sky colour and a first-person camera on screen
+// until the new planet appeared, and then everything jumped.
+function resetView() {
+  look = 0;
+  scene.background = SPACE;
+  scene.fog.near = FOG_OFF_NEAR; scene.fog.far = FOG_OFF_FAR;
+  stars.material.opacity = 1; stars.visible = true;
+  camera.position.setLength(Math.max(camera.position.length(), ORBIT_DISTANCE));
+  setNear(NEAR_MAX);
+  controls.update(); // turns the camera back to face the centre
+}
+
+function setNear(near) {
+  if (Math.abs(near - camera.near) < 1e-4) return;
+  camera.near = near;
+  camera.updateProjectionMatrix();
+}
+
+function updateNearPlane() {
+  local.copy(camera.position).applyMatrix4(planetInverse());
+  const r = local.length();
+  const height = r - planet.radius - planet.getHeight(local.divideScalar(r));
+  setNear(THREE.MathUtils.clamp(height * NEAR_PER_HEIGHT, NEAR_MIN, NEAR_MAX));
 }
 
 // ---------- Playhead marker (orbit): a ring on the ground where the song is now ----------
@@ -182,8 +215,7 @@ async function loadSong(index) {
     planet = player = music = marker = null;
   }
   move = null;
-  look = 0;
-  scene.fog = null;
+  resetView();
   setMode('loading');
   updateHud();
 
@@ -202,6 +234,7 @@ async function loadSong(index) {
     scene.add(planet.group);
     marker = createMarker();
     planet.group.add(marker);
+    renderer.compile(scene, camera); // build the shaders now, during "loading", not in the first visible frame
     player = createPlayer({
       camera, domElement: renderer.domElement, planet,
       pointerLock: useLock,
@@ -215,9 +248,7 @@ async function loadSong(index) {
 
     // Back to a clean orbit view
     songTime = 0;
-    camera.position.setLength(Math.max(camera.position.length(), ORBIT_DISTANCE));
     controls.enabled = true;
-    controls.update();
     facing = Math.atan2(camera.position.z, camera.position.x);
     planet.group.rotation.y = -facing;
     setMode('orbit');
@@ -342,7 +373,7 @@ function checkLandmarks() {
     if (distance < LANDMARK_RANGE && !nearby.has(i)) {
       nearby.add(i);
       console.log(`[landmark] ${landmark.name} (${landmark.kind}): ${landmark.lore}`);
-    } else if (distance > LANDMARK_RANGE + 2 && nearby.has(i)) {
+    } else if (distance > LANDMARK_RANGE * 1.25 && nearby.has(i)) {
       nearby.delete(i); // left: it can trigger again on the next visit
     }
   });
@@ -394,6 +425,7 @@ renderer.setAnimationLoop((now) => {
 
     // 3. The world reacts
     planet.update(dt, songTime, listener);
+    updateNearPlane();
     applyLook();
     updateMarker();
   }
