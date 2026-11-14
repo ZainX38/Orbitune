@@ -55,6 +55,7 @@ export function createSongPicker(container, { onSongChosen }) {
       button.type = 'button';
       button.className = 'song-picker__row';
       button.append(cover, text);
+      button.addEventListener('click', () => chooseSong(song));
 
       const item = document.createElement('li');
       item.append(button);
@@ -72,6 +73,43 @@ export function createSongPicker(container, { onSongChosen }) {
   function showSongs(songs) {
     if (songs.length) show('', songs);
     else show('No songs found.');
+  }
+
+  // ---- Picking a search result ----
+
+  // True while a song is downloading, so a double click does not fetch it twice.
+  let loadingSong = false;
+
+  // Downloads the song's 30-second MP3 from server and hands it to the app.
+  async function chooseSong(song) {
+    if (loadingSong) return;
+    loadingSong = true;
+    status.textContent = `Loading "${song.title}"…`;
+
+    try {
+      const res = await fetch(`/audio/${song.id}`);
+      if (!res.ok) throw new Error(`Audio failed with status ${res.status}`);
+
+      // A Blob is a chunk of raw file data held in the browser's memory.
+      // Here it is the MP3 itself.
+      const blob = await res.blob();
+
+      status.textContent = `Selected: ${song.title} by ${song.artist}`;
+
+      onSongChosen({
+        source: 'deezer',
+        title: song.title,
+        artist: song.artist,
+        cover: song.cover,
+        blob,
+      });
+    } catch {
+      status.textContent = 'Could not load that song. Try another one.';
+    } finally {
+      // `finally` runs whether the download worked or failed, so the picker
+      // never gets stuck refusing clicks.
+      loadingSong = false;
+    }
   }
 
   // ---- Live search ----
