@@ -1,0 +1,62 @@
+{
+  "planetName": "Aethelis Prime",
+  "mood": "Somber, delicate, and rapidly flickering in quiet meditation",
+  "biome": "Obsidian Dust Dunes and Glass Steppes",
+  "palette": {
+    "ground": "#1b1418",
+    "peaks": "#3d2b27",
+    "sky": "#0f0b10",
+    "fog": "#4a332d"
+  },
+  "flora": [
+    "Chime-spindle Grass",
+    "Velvet Dust-Moss",
+    "Needle-leaf Lotus"
+  ],
+  "sections": [
+    {
+      "type": "intro",
+      "start": 0,
+      "end": 51
+    },
+    {
+      "type": "bridge",
+      "start": 51,
+      "end": 56
+    },
+    {
+      "type": "chorus",
+      "start": 56,
+      "end": 107
+    },
+    {
+      "type": "verse",
+      "start": 107,
+      "end": 111
+    },
+    {
+      "type": "verse",
+      "start": 111,
+      "end": 133
+    },
+    {
+      "type": "outro",
+      "start": 133,
+      "end": 135
+    }
+  ],
+  "landmarks": [
+    {
+      "name": "The Pulsing Spires of Aethel",
+      "section": "chorus",
+      "kind": "crystalline mountain range",
+      "lore": "Slender glass peaks hum silently as rapid warmth surges through their core. They glow faintly against the dim horizon before vanishing back into shadows."
+    }
+  ],
+  "ambiencePrompts": [
+    "Rapid soft tapping on hollow glass rocks",
+    "A faint warm wind whispering through velvet moss",
+    "Distant delicate reverberations in a dark cavern"
+  ],
+  "narratorStyle": "A soft-spoken archivist delivering hushed secrets at midnight."
+}
