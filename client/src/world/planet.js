@@ -94,7 +94,7 @@ export function createPlanet(features, blueprint) {
   // ---------- Everything on and around it ----------
   // The song's own colour (Role 2), pulled towards the palette so the glow always suits the planet
   const glowColour = colours.atmosphere.clone().lerp(pal.night ? pal.peaks : pal.sky, 0.45);
-  const atmosphere = createAtmosphere(RADIUS, glowColour, colours.fog);
+  const atmosphere = createAtmosphere(RADIUS, glowColour, colours.fog, colours.sky);
   group.add(atmosphere.group);
 
   const clouds = createClouds(RADIUS, terrain.seed, pal.cloud, reactive);
@@ -141,6 +141,7 @@ export function createPlanet(features, blueprint) {
     glow.glowColor.value.copy(baseGlow).lerp(hotGlow, Math.min(1, 0.5 * treble + 0.4 * beat));
     glow.sunDirection.value.copy(sunDirection);
     atmosphere.sky.material.uniforms.hazeColor.value.copy(colours.fog);
+    atmosphere.sky.material.uniforms.skyColor.value.copy(colours.sky);
 
     for (const l of landmarks) {
       l.marker.material.emissiveIntensity = 0.8 + beat * 1.6 + loud * 0.5;
