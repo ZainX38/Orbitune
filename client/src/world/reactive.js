@@ -80,7 +80,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
   #ifdef ORB_TERRAIN
     vec3 orbQ = orbDir * 42.0;
     float orbWave = 0.0;
-    if (vWater > 0.25) {
+    if (vWater > 0.45) {
       orbWave = (sin(orbQ.x * 1.3 + orbQ.y * 0.7 + uTime * 0.9)
                + sin(orbQ.z * 1.7 - orbQ.x * 0.6 + uTime * 1.2)
                + sin((orbQ.y + orbQ.z) * 2.3 + uTime * 0.7)) / 3.0;
@@ -95,14 +95,14 @@ const FRAGMENT_COLOUR = /* glsl */ `
 // After <roughnessmap_fragment>: water is shiny
 const FRAGMENT_ROUGHNESS = /* glsl */ `
   #ifdef ORB_TERRAIN
-    if (vWater > 0.25) roughnessFactor = 0.2;
+    if (vWater > 0.45) roughnessFactor = 0.2;
   #endif
 `;
 
 // After <normal_fragment_begin>: water gets a smooth, wobbling normal instead of flat facets -> moving highlights
 const FRAGMENT_NORMAL = /* glsl */ `
   #ifdef ORB_TERRAIN
-    if (vWater > 0.25) {
+    if (vWater > 0.45) {
       vec3 orbWobble = vec3(
         cos(orbQ.x * 2.1 + orbQ.z * 1.3 + uTime * 1.1),
         cos(orbQ.y * 2.6 - orbQ.x * 1.1 + uTime * 0.8),

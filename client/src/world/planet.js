@@ -17,7 +17,8 @@ import { createClouds } from './clouds.js';
 import { createFlora } from './flora.js';
 import { placeLandmarks } from './landmarks.js';
 import { createSurface } from './surface.js';
-import { fbm, makeRng } from './noise.js';
+import { createIcosphere } from './sphere.js';
+import { fbm } from './noise.js';
 
 const DETAIL = 50; // icosphere subdivisions: 20 * (DETAIL+1)^2 faces (~52k). Lower if slow (40 = ~34k).
 const SUN_FOLLOWS_LISTENER = true; // the sun stays ahead (east) of the listener, so where you are is always lit
@@ -31,64 +32,65 @@ export function createPlanet(features, blueprint) {
   const group = new THREE.Group();
 
   // ---------- Ground + sea (one mesh, never moves) ----------
-  // IcosahedronGeometry is non-indexed: every face has its own 3 vertices -> crisp flat shading
-  const geo = new THREE.IcosahedronGeometry(RADIUS, DETAIL);
-  const pos = geo.attributes.position;
-  const colourData = new Float32Array(pos.count * 3);
-  const waterData = new Float32Array(pos.count); // 0 = land. 0.5..1 = water, deeper = higher (see reactive.js)
-  const colourFor = makeColourer(pal, terrain.seaLevel, terrain.levels);
-  const rng = makeRng(terrain.seed);
-  const c = new THREE.Color();
-  const dirs = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-  const pts = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-  const heights = [0, 0, 0];
-  const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), normal = new THREE.Vector3(), centre = new THREE.Vector3();
-  let waterFaces = 0;
+  // Neighbouring triangles share their vertices (sphere.js), so normals and colours are per VERTEX and the GPU
+  // blends them across each triangle: smooth shading, soft colour bands. The triangles themselves are still flat.
+  const { directions, index } = createIcosphere(DETAIL);
+  const count = directions.length / 3;
+  const positions = new Float32Array(count * 3);
+  const heights = new Float32Array(count);
+  const dir = new THREE.Vector3(), e1 = new THREE.Vector3();
 
-  for (let i = 0; i < pos.count; i += 3) {
-    // Displace the 3 vertices of this face
-    for (let k = 0; k < 3; k++) {
-      dirs[k].fromBufferAttribute(pos, i + k).normalize();
-      heights[k] = terrain.getHeight(dirs[k]);
-      pts[k].copy(dirs[k]).multiplyScalar(RADIUS + heights[k]);
-      pos.setXYZ(i + k, pts[k].x, pts[k].y, pts[k].z);
-    }
-    const isWater = heights.every((h) => Math.abs(h - terrain.seaLevel) < 0.01);
-
-    if (isWater) {
-      // Water: colour per vertex from the depth of the sea bed, so it blends smoothly from shore to deep
-      waterFaces++;
-      for (let k = 0; k < 3; k++) {
-        const depth = terrain.getDepth(dirs[k]);
-        waterColour(pal, depth, c);
-        colourData.set([c.r, c.g, c.b], (i + k) * 3);
-        waterData[i + k] = 0.5 + 0.5 * Math.min(1, depth / 3);
-      }
-    } else {
-      // Land: one colour per face from its height, its slope and a patchy noise
-      normal.crossVectors(e1.subVectors(pts[1], pts[0]), e2.subVectors(pts[2], pts[0])).normalize();
-      centre.addVectors(dirs[0], dirs[1]).add(dirs[2]).normalize();
-      const slope = 1 - Math.abs(normal.dot(centre));
-      const patch = 0.5 + fbm(centre.x * 2.2, centre.y * 2.2, centre.z * 2.2, 3, terrain.seed + 77);
-      colourFor((heights[0] + heights[1] + heights[2]) / 3, slope, patch, rng(), c);
-      for (let k = 0; k < 3; k++) colourData.set([c.r, c.g, c.b], (i + k) * 3);
-    }
+  // 1. Displace every vertex along its direction by the height function
+  for (let i = 0; i < count; i++) {
+    dir.fromArray(directions, i * 3);
+    heights[i] = terrain.getHeight(dir);
+    dir.multiplyScalar(RADIUS + heights[i]).toArray(positions, i * 3);
   }
-
-  geo.setAttribute('color', new THREE.BufferAttribute(colourData, 3));
-  geo.setAttribute('aWater', new THREE.BufferAttribute(waterData, 1));
-  geo.computeVertexNormals();
+  const geo = new THREE.BufferGeometry();
+  geo.setIndex(new THREE.BufferAttribute(index, 1));
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.computeVertexNormals(); // each vertex: the average of the triangles around it
   geo.computeBoundingSphere();
 
+  // 2. Colour every vertex from its height, the slope of its (smooth) normal and two soft noises
+  const normals = geo.attributes.normal.array;
+  const colourData = new Float32Array(count * 3);
+  const waterData = new Float32Array(count); // 0 = land. 0.5..1 = water, deeper = higher (see reactive.js)
+  const colourFor = makeColourer(pal, terrain.seaLevel, terrain.levels);
+  const c = new THREE.Color();
+  let waterVertices = 0;
+
+  for (let i = 0; i < count; i++) {
+    dir.fromArray(directions, i * 3);
+    const depth = terrain.getDepth(dir);
+    if (depth > 0 && Math.abs(heights[i] - terrain.seaLevel) < 0.01) {
+      // Water: colour from the depth of the sea bed, so it blends smoothly from shore to deep
+      waterVertices++;
+      waterColour(pal, depth, c);
+      waterData[i] = 0.5 + 0.5 * Math.min(1, depth / 3);
+    } else {
+      const slope = 1 - Math.abs(normals[i * 3] * dir.x + normals[i * 3 + 1] * dir.y + normals[i * 3 + 2] * dir.z);
+      const patch = 0.5 + fbm(dir.x * 2.2, dir.y * 2.2, dir.z * 2.2, 3, terrain.seed + 77);
+      const mottle = 0.5 + 0.5 * fbm(dir.x * 19, dir.y * 19, dir.z * 19, 2, terrain.seed + 123); // subtle, not per face
+      colourFor(heights[i], slope, patch, mottle, c);
+    }
+    c.toArray(colourData, i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colourData, 3));
+  geo.setAttribute('aWater', new THREE.BufferAttribute(waterData, 1));
+
   const ground = new THREE.Mesh(geo, reactive.patch(
-    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.92, metalness: 0 }), 'terrain'));
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), 'terrain'));
   ground.name = 'ground';
   group.add(ground);
 
   // CONTRACT 3 is answered from the finished mesh, not from the height function: the function is only sampled at
-  // the vertices, and between them the flat triangles differ from it by up to 0.8 units (see surface.js).
+  // the vertices, and between them the flat triangles differ from it (see surface.js). Smooth shading changes how
+  // the triangles are LIT, not where they are, so this is still exactly the ground that is drawn.
   // Everything that stands on the ground (flora, landmarks, the player) uses this, so it touches what is drawn.
-  const { getHeight } = createSurface(pos, RADIUS);
+  const triangles = new Float32Array(index.length * 3); // the same triangles, 9 numbers each
+  for (let i = 0; i < index.length; i++) triangles.set(positions.subarray(index[i] * 3, index[i] * 3 + 3), i * 3);
+  const { getHeight } = createSurface({ array: triangles }, RADIUS);
   const land = { ...terrain, getHeight };
 
   // ---------- Everything on and around it ----------
@@ -165,7 +167,7 @@ export function createPlanet(features, blueprint) {
   const directionAt = (time, out) => directionOfLongitude((((time / features.duration) % 1) + 1) % 1, out);
 
   console.timeEnd('[planet] build');
-  console.log('[planet]', blueprint.planetName, '| faces:', pos.count / 3, `| ${Math.round((waterFaces / (pos.count / 3)) * 100)}% water`,
+  console.log('[planet]', blueprint.planetName, '| faces:', index.length / 3, '| vertices:', count, `| ${Math.round((waterVertices / count) * 100)}% water`,
     '| flora:', flora.kinds.join(' + '), pal.night ? '| night planet' : '| day planet');
 
   return {
