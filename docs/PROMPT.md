@@ -60,7 +60,7 @@ polyphonia/
     elevenlabs.js      /narrate, /ambience (+ music for Fusion)   ← Role 4
     cache/             cached files, keyed by song hash / track id
   client/              Vite app
-    index.html         the real app page
+    mvp.html           the app page (MVP)
     world-test.html    Role 3's test page
     src/main.js        wires everything together                  ← Role 3 (lead)
     src/ui/            search, upload, loading, gallery           ← Role 1
