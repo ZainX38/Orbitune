@@ -1,4 +1,5 @@
 import './songPicker.css';
+import { trimToMiddle } from './trimAudio.js';
 
 // Builds the song picker inside `container`.
 // `onSongChosen` is a function the rest of the app passes in. The picker will
@@ -163,5 +164,53 @@ export function createSongPicker(container, { onSongChosen }) {
         show('Search failed. Check your connection and try again.');
       }
     }, 250);
+  });
+
+  // ---- Uploading a song ----
+
+  const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB
+
+  // The real file input is hidden because browsers style it badly and it
+  // cannot be restyled much. Our own button opens it instead.
+  uploadButton.addEventListener('click', () => fileInput.click());
+
+  // 'change' fires once the user has picked a file in the dialog.
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+
+    // Clear the input, otherwise picking the same file twice in a row would
+    // not fire 'change' the second time. `file` is still usable after this.
+    fileInput.value = '';
+
+    if (!file) return; // the user closed the dialog without choosing
+
+    // The dialog only suggests audio files. The user can still switch it to
+    // "All files", so we have to check for ourselves.
+    if (!file.type.startsWith('audio/')) {
+      status.textContent = 'That is not an audio file. Choose an MP3 or similar.';
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      status.textContent = 'That file is too big. The limit is 15 MB.';
+      return;
+    }
+
+    // "My Song.mp3" becomes "My Song".
+    const title = file.name.replace(/\.[^.]+$/, '');
+    status.textContent = `Preparing "${title}"…`;
+
+    try {
+      // Keep only the middle 30 seconds, so an upload is the same length as
+      // a Deezer preview.
+      const blob = await trimToMiddle(file);
+      status.textContent = `Selected: ${title}`;
+
+      // An upload has no artist or cover art.
+      onSongChosen({ source: 'upload', title, artist: '', cover: null, blob });
+    } catch {
+      // Decoding fails if the file is damaged or in a format the browser
+      // cannot play.
+      status.textContent = 'Could not read that audio file. Try a different one.';
+    }
   });
 }
