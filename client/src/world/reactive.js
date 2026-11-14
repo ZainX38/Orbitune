@@ -16,6 +16,7 @@ const MAX_RIPPLES = 4;
 const RIPPLE_SPEED = 26; // units per second along the ground
 const RIPPLE_LIFE = 1.9; // seconds
 const RIPPLE_WIDTH = 1.1;
+const RIPPLE_FADE_IN = 0.2; // seconds until a new ripple reaches full strength (it is then ~5 units from the listener)
 
 const VERTEX_PARS = /* glsl */ `
   varying vec3 vPlanetPos;
@@ -125,7 +126,10 @@ const FRAGMENT_LIGHT = /* glsl */ `
         float orbDist = acos(clamp(dot(orbDir, uRipples[i].xyz), -1.0, 1.0)) * ${RADIUS.toFixed(1)};
         float orbX = (orbDist - orbAge * ${RIPPLE_SPEED.toFixed(1)}) / ${RIPPLE_WIDTH.toFixed(1)};
         float orbFade = max(0.0, 1.0 - orbAge / ${RIPPLE_LIFE.toFixed(1)});
-        totalEmissiveRadiance += uRippleColor * exp(-orbX * orbX) * orbFade * orbFade;
+        // A ripple is born right under the listener. At full strength there, it fills a low first-person view
+        // with one washed-out flash on every beat, so it fades in over its first few units of travel.
+        float orbBorn = smoothstep(0.0, ${RIPPLE_FADE_IN.toFixed(2)}, orbAge);
+        totalEmissiveRadiance += uRippleColor * exp(-orbX * orbX) * orbFade * orbFade * orbBorn;
       }
     }
   #endif
