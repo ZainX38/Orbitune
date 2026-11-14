@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { RADIUS } from './terrain.js';
+import { tintLike } from './biome.js';
 
 const MAX_RIPPLES = 4;
 const RIPPLE_SPEED = 26; // units per second along the ground
@@ -153,7 +154,10 @@ export function createReactive(features, pal, colours) {
   let nextRipple = 0;
 
   const baseSky = colours.sky.clone(), baseFog = colours.fog.clone();
+  // What loud moments pull the sky and fog towards: the music's colour, at most 3x as bright as the sky or fog itself.
+  // (Unscaled, this bright colour turned dark night skies grey: see tintLike.)
   const tint = pal.peaks.clone().lerp(colours.atmosphere, 0.5);
+  const skyTint = tintLike(baseSky, tint, 3), fogTint = tintLike(baseFog, tint, 3);
 
   // Feature value at a song time, interpolated between frames
   function sample(arr, songTime) {
@@ -210,10 +214,9 @@ export function createReactive(features, pal, colours) {
     }
 
     // Sky and fog follow the moment: brighter and more tinted when the song is loud, a flash on each beat
-    // (dark night skies need far less tint: colours mix in linear light)
-    const k = Math.min(0.5, 0.16 * now.loud + 0.1 * now.beat + 0.08 * now.treble) * (pal.night ? 0.12 : 0.7);
-    colours.sky.copy(baseSky).lerp(tint, k);
-    colours.fog.copy(baseFog).lerp(tint, k * 0.7);
+    const k = Math.min(0.5, 0.16 * now.loud + 0.1 * now.beat + 0.08 * now.treble) * 0.7;
+    colours.sky.copy(baseSky).lerp(skyTint, k);
+    colours.fog.copy(baseFog).lerp(fogTint, k * 0.7);
   }
 
   return { uniforms, patch, onBeat, update, now, listener };

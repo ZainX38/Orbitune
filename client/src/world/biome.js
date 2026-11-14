@@ -5,7 +5,14 @@
 import * as THREE from 'three';
 
 const smoothstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-const luminance = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+export const luminance = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+
+// `tint` at (about) the brightness of `base`, for tinting base's HUE without changing how bright it is.
+// Colours mix as light: mixing even 1% of a bright colour into a dark one mostly adds brightness, and when the two
+// are opposite hues (a green song colour into a violet night sky) what comes out is grey. gain > 1 = a brighter tint.
+export function tintLike(base, tint, gain = 1) {
+  return tint.clone().multiplyScalar(Math.min(1, (gain * luminance(base)) / Math.max(luminance(tint), 1e-4)));
+}
 
 // All the colours the world needs, derived from the 4 palette colours
 export function derivePalette(palette) {
@@ -69,12 +76,12 @@ export function waterColour(pal, depth, out) {
 export function skyColours(blueprint, features) {
   const sky = new THREE.Color(blueprint.palette.sky);
   const atmosphere = new THREE.Color(features.atmosphere ?? blueprint.palette.sky);
-  // Colours mix in linear light, where a bright colour quickly swamps a dark one: tint dark skies only a touch
-  const tint = luminance(sky) < 0.08 ? 0.012 : 0.1;
+  const fog = new THREE.Color(blueprint.palette.fog);
+  const tint = 0.1; // a touch of the song's hue. tintLike keeps the palette's own brightness, so dark skies stay dark and saturated
   return {
     space: new THREE.Color('#05060d').lerp(sky, 0.003),                      // orbit background
-    sky: sky.clone().lerp(atmosphere, tint),                                 // surface background
-    fog: new THREE.Color(blueprint.palette.fog).lerp(atmosphere, tint),      // surface fog
+    sky: sky.clone().lerp(tintLike(sky, atmosphere), tint),                  // surface background
+    fog: fog.clone().lerp(tintLike(fog, atmosphere), tint),                  // surface fog
     atmosphere,                                                              // the song's own colour (Role 2)
   };
 }
