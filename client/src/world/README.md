@@ -28,7 +28,7 @@ Test page: `npm run dev`, then `http://localhost:5173/world-test.html` (fake dat
 | Field | Status | What it is |
 | --- | --- | --- |
 | `group` | same | `THREE.Group` with everything. Now also contains the sun (a `DirectionalLight`). |
-| `getHeight(direction)` | same (Contract 3) | Height above `radius` for a normalised direction in the planet's own space. Same function that builds the mesh. Never changes after the build. |
+| `getHeight(direction)` | same call (Contract 3), **more exact** | Height above `radius` for a normalised direction in the planet's own space. It now returns the height of the **drawn mesh** (the flat triangles), not the height function the mesh was sampled from: between vertices those two differed by up to 0.8 units, so trees floated and a low camera could end up under the ground. Never changes after the build. About 0.6 µs per call. |
 | `radius` | same | 50 |
 | `landmarks` | **extended** | `[{ name, lore, kind, section, position, marker, time, beam }]`. New: `time` (seconds in the song where the landmark sits) and `beam` (the light beam mesh). |
 | `colours` | **changed behaviour** | `{ space, sky, fog, atmosphere }` as before, but `sky` and `fog` are now **live**: `update()` re-tints these same `THREE.Color` objects every frame. See "Sky and fog" below. |
@@ -59,9 +59,17 @@ Order per frame: move the player, update the music (get `songTime`), then `plane
 
 ```js
 scene.background = planet.colours.sky;                     // keeps following the music by itself (same object)
-scene.fog = new THREE.Fog(planet.colours.fog, 20, 140);    // Fog COPIES the colour, so also do this every frame:
+scene.fog = new THREE.Fog(planet.colours.fog, 5, 75);      // Fog COPIES the colour, so also do this every frame:
 scene.fog.color.copy(planet.colours.fog);
 ```
+
+The planet also draws its own sky dome when the camera is inside the atmosphere (sky colour overhead, fog colour
+at the horizon, tone-mapped like the ground), so the horizon meets the fog without a seam. `scene.background` only
+shows through while the camera is on its way down.
+
+Fog 5..75 fits a player with eyes 0.6 above the ground (`PLAYER_SCALE` in `experience/player.js`): the horizon is
+about 8 units away and nothing further than about 55 is ever visible. Keep the fog object alive in orbit too (push
+near/far out of range instead of setting `scene.fog = null`), or three.js recompiles every shader on landing.
 
 In orbit: `scene.background = planet.colours.space`, `scene.fog = null` (unchanged).
 
@@ -86,10 +94,11 @@ plants (sway). `getHeight` and the ground mesh are fixed from the moment the pla
 ## Files
 
 - `planet.js`: entry point. Builds the ground mesh (colour by height + slope), puts everything together, `update`.
-- `terrain.js`: `getHeight` (Contract 3), sea level, song character, longitude <-> time helpers.
+- `terrain.js`: the height function the mesh is built from, sea level, song character, longitude <-> time helpers.
+- `surface.js`: `getHeight` (Contract 3): the exact height of the built mesh in any direction.
 - `biome.js`: all colours, derived from the Blueprint palette.
 - `reactive.js`: the shared shader uniforms and shader patches: water waves, hemisphere light, beat ripples, sway.
-- `atmosphere.js`: rim glow seen from orbit + horizon haze seen from the surface.
+- `atmosphere.js`: rim glow seen from orbit + the sky dome seen from the surface.
 - `clouds.js`: drifting low-poly clouds.
 - `flora.js`: the plant shapes and where they grow.
 - `landmarks.js`: landmark crystals and beams, returns the landmark list.
@@ -100,4 +109,4 @@ plants (sway). `getHeight` and the ground mesh are fixed from the moment the pla
 
 - Too slow: lower `DETAIL` in `planet.js` (50 = about 52k triangles, 40 = about 34k), `total` in `createFlora`, `clusters` in `createClouds`.
 - Sun should not follow the listener: set `SUN_FOLLOWS_LISTENER = false` in `planet.js`.
-- Ripple speed, life and width: top of `reactive.js`.
+- Ripple speed, life, width and fade-in: top of `reactive.js`.
