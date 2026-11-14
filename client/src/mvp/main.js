@@ -32,8 +32,8 @@ const HINTS = {
   loading: 'Listening to the song…',
   start: 'Click anywhere to start the music',
   orbit: 'Click the planet to land',
-  surface: 'WASD to walk · Shift to run · Esc to take off',
-  surfaceNoLock: 'WASD or click the ground to walk · Shift to run · drag to look · Esc to take off',
+  surface: 'WASD to walk · Shift to run · the beam of light is where the song is · Esc to take off',
+  surfaceNoLock: 'WASD or click the ground to walk · Shift to run · drag to look · the beam of light is where the song is · Esc to take off',
 };
 
 // ---------- Renderer, scene, camera ----------
@@ -171,7 +171,9 @@ function updateNearPlane() {
   setNear(THREE.MathUtils.clamp(height * NEAR_PER_HEIGHT, NEAR_MIN, NEAR_MAX));
 }
 
-// ---------- Playhead marker (orbit): a ring on the ground where the song is now ----------
+// ---------- Playhead marker: a ring on the ground where the song is now (orbit and surface) ----------
+const MARKER_BEAM = 16;           // height of the surface light beam
+const MARKER_SURFACE_SIZE = 0.4;  // ring size on the surface, relative to its orbit size
 function createMarker() {
   const group = new THREE.Group();
   const material = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, fog: false, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -180,17 +182,32 @@ function createMarker() {
   const pin = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.4, 4), material);
   pin.rotation.x = Math.PI;      // point down at the ground
   pin.position.y = 3.4;
-  group.add(ring, pin);
+  // Surface only: a tall beam of light, so the playhead can be seen coming from beyond the (very close) horizon
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05, 0.3, MARKER_BEAM, 10, 1, true).translate(0, MARKER_BEAM / 2, 0),
+    new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, fog: false, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  group.add(ring, pin, beam);
+  Object.assign(group.userData, { ring, pin, beam });
   return group;
 }
 
+// In orbit the marker sits on the equator. On the surface it is drawn at the music's longitude but at the PLAYER'S
+// latitude, so it always comes past the player: once per lap of the song.
 function updateMarker() {
   const dir = planet.directionAt(songTime, local);
+  const k = look * look * (3 - 2 * look); // 0 = orbit ... 1 = surface
+  if (k > 0) {
+    const y = THREE.MathUtils.clamp(player.getDirection().y, -0.98, 0.98) * k;
+    dir.multiplyScalar(Math.sqrt(1 - y * y)).setY(y);
+  }
   marker.quaternion.setFromUnitVectors(UP, dir);
-  marker.position.copy(dir).multiplyScalar(planet.radius + planet.getHeight(dir) + 0.5);
-  marker.visible = look < 0.5;
-  const pulse = 1 + 0.25 * beatPulse;
-  marker.scale.set(pulse, 1, pulse);
+  marker.position.copy(dir).multiplyScalar(planet.radius + planet.getHeight(dir) + THREE.MathUtils.lerp(0.5, 0.12, k));
+  const { ring, pin, beam } = marker.userData;
+  const size = THREE.MathUtils.lerp(1, MARKER_SURFACE_SIZE, k) * (1 + 0.25 * beatPulse);
+  ring.scale.setScalar(size);
+  pin.visible = k < 0.5;
+  beam.visible = k > 0;
+  beam.material.opacity = k * (0.22 + 0.3 * beatPulse);
 }
 
 // ---------- Songs ----------
