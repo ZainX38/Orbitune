@@ -18,10 +18,19 @@
 
 import * as THREE from 'three';
 
+// THE knob for how big the world feels: the player's size relative to the planet (radius 50).
+// 1 = the original human-sized player (eyes 1.7 above the ground, the whole equator in 29 s at a run).
+// Smaller = a smaller player = a bigger planet. Eye height, speeds and every distance below scale with it,
+// and so do the things in mvp/main.js that depend on the player's size (near plane, landmark range).
+export const PLAYER_SCALE = 0.35;
+
 const DEFAULTS = {
-  eyeHeight: 1.7,
-  walkSpeed: 5,        // units per second
-  runSpeed: 11,        // with Shift. About the speed of a 30 s song on the equator (2*PI*52/30), so running east keeps up with the music
+  eyeHeight: 1.7 * PLAYER_SCALE, // 0.6
+  walkSpeed: 5 * PLAYER_SCALE,   // 1.75 units per second: once around the equator in about 3 minutes
+  runSpeed: 11 * PLAYER_SCALE,   // 3.85 with Shift: about 80 s around the equator.
+                                 // A 30 s song moves along the equator at 2*PI*50/30 = 10.5 units per second, so the
+                                 // music is now faster than a run: walking east it repeats bars while you catch up
+                                 // (songPosition.js). At PLAYER_SCALE 1 a run kept up with it.
   smoothing: 8,        // higher = snappier start/stop
   sensitivity: 0.0022, // radians per pixel of mouse movement
   maxPitch: THREE.MathUtils.degToRad(85),
@@ -32,7 +41,13 @@ const DEFAULTS = {
 
 const KEYS = { KeyW: 'f', ArrowUp: 'f', KeyS: 'b', ArrowDown: 'b', KeyA: 'l', ArrowLeft: 'l', KeyD: 'r', ArrowRight: 'r' };
 const CLICK_SLOP = 5;    // px the mouse may move and still count as a click
-const ARRIVE_DIST = 0.6; // click-to-walk stops this close to the target
+const ARRIVE_DIST = 0.6 * PLAYER_SCALE; // click-to-walk stops this close to the target
+// The eye keeps this much room from the ground AROUND it, not only below it (both as a share of the eye height).
+// On a steep slope the ground beside you is closer than the ground under you; without this the camera's near
+// plane cuts into the hillside and you see through it.
+const HEAD_RING = 0.35;  // how far around the eye to look
+const HEAD_ROOM = 0.2;   // the eye stays at least this far above the ground found there
+const RING = Array.from({ length: 6 }, (_, i) => [Math.cos((i / 6) * Math.PI * 2), Math.sin((i / 6) * Math.PI * 2)]);
 
 export function createPlayer({ camera, domElement, planet, ...options }) {
   const opt = { ...DEFAULTS, ...options };
@@ -53,7 +68,7 @@ export function createPlayer({ camera, domElement, planet, ...options }) {
   const localPosition = new THREE.Vector3();
 
   // Scratch
-  const tmp = new THREE.Vector3(), look = new THREE.Vector3(), camUp = new THREE.Vector3();
+  const tmp = new THREE.Vector3(), look = new THREE.Vector3(), camUp = new THREE.Vector3(), probe = new THREE.Vector3();
   const basis = new THREE.Matrix4(), localQuat = new THREE.Quaternion(), groupQuat = new THREE.Quaternion();
   const inverse = new THREE.Matrix4(), rayO = new THREE.Vector3(), rayD = new THREE.Vector3();
   const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -74,10 +89,23 @@ export function createPlayer({ camera, domElement, planet, ...options }) {
     right.crossVectors(forward, up);
   }
 
+  // Distance of the eye from the planet's centre: eye height above the ground under us, or higher if the ground
+  // right next to us (a steep slope) would come too close. getHeight only. Needs computeBasis() first.
+  function eyeRadius() {
+    const ground = groundRadius(dir);
+    let r = ground + opt.eyeHeight;
+    for (const [c, s] of RING) {
+      probe.copy(dir).multiplyScalar(ground)
+        .addScaledVector(forward, c * HEAD_RING * opt.eyeHeight).addScaledVector(right, s * HEAD_RING * opt.eyeHeight).normalize();
+      r = Math.max(r, groundRadius(probe) + HEAD_ROOM * opt.eyeHeight);
+    }
+    return r;
+  }
+
   // Write the camera from scratch: position from getHeight, orientation from up + yaw + pitch.
   function writeCamera() {
     computeBasis();
-    localPosition.copy(dir).multiplyScalar(groundRadius(dir) + opt.eyeHeight);
+    localPosition.copy(dir).multiplyScalar(eyeRadius());
     look.copy(forward).multiplyScalar(Math.cos(pitch)).addScaledVector(up, Math.sin(pitch));
     camUp.copy(up).multiplyScalar(Math.cos(pitch)).addScaledVector(forward, -Math.sin(pitch));
     basis.makeBasis(right, camUp, look.negate()); // cameras look down their -Z
@@ -125,15 +153,19 @@ export function createPlayer({ camera, domElement, planet, ...options }) {
     rayD.copy(raycaster.ray.direction).transformDirection(inverse);
 
     const above = (t) => { tmp.copy(rayO).addScaledVector(rayD, t); const r = tmp.length(); return r - groundRadius(tmp.divideScalar(r)); };
-    const maxT = planet.radius * 3;
-    let t0 = 0;
-    for (let t = 0.5; t < maxT; t += 0.5) {
-      if (above(t) <= 0) {
+    // Steps are short near the ground (so a ray grazing it from a low eye does not skip a ridge) and longer the
+    // higher the ray is above it.
+    const maxT = planet.radius * 3, minStep = 0.25 * opt.eyeHeight;
+    let t0 = 0, t = minStep;
+    while (t < maxT) {
+      const height = above(t);
+      if (height <= 0) {
         let lo = t0, hi = t; // crossed the ground between lo and hi: narrow it down
         for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; if (above(m) <= 0) hi = m; else lo = m; }
         return rayO.clone().addScaledVector(rayD, hi).normalize();
       }
       t0 = t;
+      t += Math.max(minStep, height * 0.5);
     }
     return null; // clicked the sky
   }
@@ -253,7 +285,7 @@ export function createPlayer({ camera, domElement, planet, ...options }) {
         tmp.divideScalar(flat);
         wantX = tmp.dot(right);
         wantY = tmp.dot(forward);
-        speed = Math.min(speed, distance * 2 + 0.5); // ease in to the target
+        speed = Math.min(speed, distance * 2 + 0.5 * PLAYER_SCALE); // ease in to the target
       }
     }
 
