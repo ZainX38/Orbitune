@@ -1,31 +1,80 @@
 // Colours from the Blueprint palette (Gemini) + the atmosphere colour (Role 2's absorption spectrum).
+// The palette only has 4 colours (ground, peaks, sky, fog). Everything else (sand, rock, lush patches,
+// water, light colours) is derived from them here, so any palette gives a complete, matching world.
 
 import * as THREE from 'three';
 
-// Returns a function: (height, out: THREE.Color, jitter 0..1) -> out
-export function makeColourer(palette, seaLevel) {
+const smoothstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const luminance = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+
+// All the colours the world needs, derived from the 4 palette colours
+export function derivePalette(palette) {
   const ground = new THREE.Color(palette.ground);
   const peaks = new THREE.Color(palette.peaks);
-  const water = new THREE.Color(palette.sky).lerp(new THREE.Color('#0b1a2e'), 0.5);
-  const shore = ground.clone().lerp(new THREE.Color('#e8d9b0'), 0.4);
+  const sky = new THREE.Color(palette.sky);
+  const fog = new THREE.Color(palette.fog);
+  const night = luminance(sky) < 0.08; // dark sky = night planet: dimmer, cooler light and stronger glows
 
-  return (h, out, jitter = 0.5) => {
-    if (h <= seaLevel + 0.01) out.copy(water);
-    else if (h < 0.4) out.copy(shore);
-    else if (h < 7) out.copy(ground).lerp(peaks, Math.min(1, (h - 0.4) / 8));
-    else out.copy(peaks);
-    out.offsetHSL(0, 0, (jitter - 0.5) * 0.05); // tiny per-face variation = low-poly look
+  return {
+    ground, peaks, sky, fog, night,
+    lush: ground.clone().offsetHSL(0.06, 0.1, 0.07),                                   // lowland patches
+    highland: ground.clone().lerp(peaks, 0.4),
+    sand: ground.clone().lerp(new THREE.Color('#f2dfb8'), night ? 0.3 : 0.55),
+    rock: ground.clone().lerp(new THREE.Color('#57525c'), 0.6).offsetHSL(0, -0.04, -0.05), // steep slopes
+    canyon: ground.clone().lerp(new THREE.Color('#1c1420'), 0.55),
+    // Water: the sky mixed with sea blue (it reflects the sky), lighter and a little peak-tinted near the shore
+    waterShallow: sky.clone().lerp(new THREE.Color('#2a8fc4'), 0.5).lerp(peaks, 0.18).offsetHSL(0, 0.08, night ? 0.1 : 0.04),
+    waterDeep: sky.clone().lerp(new THREE.Color('#123a66'), 0.6).offsetHSL(0, 0.08, night ? 0.02 : -0.1),
+    foliage: ground.clone().offsetHSL(0.09, 0.12, -0.1),
+    blossom: peaks.clone().lerp(new THREE.Color('#ff7fae'), 0.6),
+    trunk: ground.clone().lerp(new THREE.Color('#3b2a22'), 0.7),
+    cloud: new THREE.Color('#ffffff').lerp(fog, night ? 0.55 : 0.25),
+    // Light: a warm sun by day, tinted moonlight at night
+    sun: new THREE.Color('#fff0d8').lerp(peaks, night ? 0.35 : 0.2),
+    sunIntensity: night ? 2.6 : 2.5,
+    hemiSky: sky.clone().lerp(new THREE.Color('#ffffff'), night ? 0.35 : 0.4).multiplyScalar(night ? 0.85 : 0.27),
+    hemiGround: ground.clone().multiplyScalar(night ? 0.5 : 0.14),
+  };
+}
+
+// Returns a function: (height, slope, patch, jitter, out) -> out
+//   height: getHeight() value. slope: 0 = flat ... 1 = vertical. patch: 0..1 low-frequency noise. jitter: 0..1 random.
+//   levels: { high, peak } heights above the water where highland and peak colours start (from terrain.js)
+export function makeColourer(pal, seaLevel, levels = { high: 4, peak: 8 }) {
+  const low = new THREE.Color();
+  return (h, slope, patch, jitter, out) => {
+    const a = h - seaLevel; // height above the water
+    if (a < -0.3) {
+      out.copy(pal.rock).lerp(pal.canyon, smoothstep(-0.3, -4, a)); // dry canyon floor
+    } else {
+      low.copy(pal.lush).lerp(pal.ground, smoothstep(0.3, 0.7, patch));
+      out.copy(pal.sand).lerp(low, smoothstep(0.25, 1.1, a));           // beach -> lowland
+      out.lerp(pal.highland, smoothstep(levels.high * 0.7, levels.peak, a)); // -> highland
+      const top = smoothstep(levels.peak, levels.peak * 1.35 + 0.5, a);
+      out.lerp(pal.peaks, top);                                         // -> peaks
+      out.lerp(pal.rock, smoothstep(0.07, 0.24, slope) * (1 - 0.65 * top) * 0.85); // rock on steep slopes
+    }
+    out.offsetHSL(0, 0, (jitter - 0.5) * 0.045); // tiny per-face variation = low-poly look
     return out;
   };
 }
 
-// Colours Role 4 needs for orbit vs surface view
+// Water colour from depth (0 at the shore)
+export function waterColour(pal, depth, out) {
+  return out.copy(pal.waterShallow).lerp(pal.waterDeep, smoothstep(0, 3.2, depth));
+}
+
+// Colours Role 4 needs for orbit vs surface view.
+// sky and fog are LIVE: planet.update() re-tints them every frame to follow the music.
 export function skyColours(blueprint, features) {
+  const sky = new THREE.Color(blueprint.palette.sky);
   const atmosphere = new THREE.Color(features.atmosphere ?? blueprint.palette.sky);
+  // Colours mix in linear light, where a bright colour quickly swamps a dark one: tint dark skies only a touch
+  const tint = luminance(sky) < 0.08 ? 0.012 : 0.1;
   return {
-    space: new THREE.Color('#05060d'),                                   // orbit background
-    sky: atmosphere.clone().lerp(new THREE.Color(blueprint.palette.sky), 0.3), // surface background
-    fog: new THREE.Color(blueprint.palette.fog).lerp(atmosphere, 0.4),   // surface fog
-    atmosphere,
+    space: new THREE.Color('#05060d').lerp(sky, 0.003),                      // orbit background
+    sky: sky.clone().lerp(atmosphere, tint),                                 // surface background
+    fog: new THREE.Color(blueprint.palette.fog).lerp(atmosphere, tint),      // surface fog
+    atmosphere,                                                              // the song's own colour (Role 2)
   };
 }

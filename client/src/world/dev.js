@@ -36,6 +36,7 @@ const mockBlueprint = {
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping; // the planet's colours are tuned for this
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -44,10 +45,7 @@ camera.position.set(0, 40, 150);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.35));
-const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-sun.position.set(100, 60, 80);
-scene.add(sun);
+// No lights needed: the planet brings its own sun and sky light.
 
 const features = fakeFeatures();
 const planet = createPlanet(features, mockBlueprint);
@@ -68,11 +66,14 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-const clock = new THREE.Clock();
-renderer.setAnimationLoop(() => {
-  const dt = clock.getDelta();
+// Fake playback: the song loops and the "listener" stands where the song is, so every reaction can be seen
+let last = performance.now(), songTime = 0;
+renderer.setAnimationLoop((now) => {
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now;
+  songTime = (songTime + dt) % features.duration;
   planet.group.rotation.y += dt * 0.05;
-  planet.update(dt);
+  planet.update(dt, songTime, planet.directionAt(songTime));
   controls.update();
   renderer.render(scene, camera);
 });
