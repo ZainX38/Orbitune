@@ -51,9 +51,6 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
   let lastTime = 0;         // song time at the previous update (for firing beats)
   let logTimer = 0;
   let listenerTime = 0;
-  // TEMP TRACE (remove after the repeat bug is fixed)
-  let traceTimer = 0;
-  const trace = (...a) => console.log('[song-trace]', ...a);
 
   // Song time at a given context time
   const timeAt = (when) => (voice ? mod(voice.offset + (when - voice.startedAt), duration) : pausedAt);
@@ -71,7 +68,6 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
       g.linearRampToValueAtTime(0, when + FADE);
     }
     v.source.stop(when + FADE + 0.02);
-    trace(`source STOP scheduled at ctx ${(when + FADE + 0.02).toFixed(3)}`);
   }
 
   // Start a new source at `offset` and fade every other one out underneath it
@@ -92,12 +88,10 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     source.onended = () => {
       source.disconnect(); gain.disconnect();
       voices.delete(v);
-      trace(`source ENDED | live sources ${voices.size}`);
     };
     voices.add(v);
     voice = v;
     lastJump = when;
-    trace(`source START at ctx ${when.toFixed(3)} offset ${v.offset.toFixed(2)}s | live sources ${voices.size}`);
   }
 
   function start() {
@@ -143,7 +137,6 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
       if (voice && Math.abs(moved) > RESYNC_AFTER && ctx.currentTime - lastJump > MIN_RESYNC_GAP) {
         // Bring the music to the listener, moving it by whole beats so it stays in time
         const shift = Math.round(around(listenerTime - time) / beat) * beat;
-        trace(`RESYNC listener moved ${moved.toFixed(2)}s from anchor ${anchor.toFixed(2)}s | playback ${time.toFixed(2)}s -> target ${mod(time + shift, duration).toFixed(2)}s (listener ${listenerTime.toFixed(2)}s)`);
         anchor = listenerTime;
         if (shift !== 0) {
           const target = mod(time + shift, duration);
@@ -155,12 +148,6 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     }
 
     fireBeats(time);
-
-    traceTimer += dt;
-    if (voice && traceTimer >= 0.5) {
-      traceTimer = 0;
-      trace(`mode ${free ? 'free' : 'surface'} | listener lon ${(listenerTime / duration).toFixed(3)} = ${listenerTime.toFixed(2)}s | anchor ${anchor === null ? '-' : anchor.toFixed(2) + 's'} | playback ${time.toFixed(2)}s | ctx ${ctx.currentTime.toFixed(2)} | live ${voices.size}`);
-    }
 
     logTimer += dt;
     if (DEBUG && voice && logTimer >= 2) {
