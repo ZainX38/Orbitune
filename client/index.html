@@ -1,1 +1,165 @@
-<script type="module" src="/src/main.js"></script>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ece7d6" />
+    <meta
+      name="description"
+      content="Orbitune turns any song into a planet you can explore. Search for a song or upload one to begin."
+    />
+    <title>Orbitune</title>
+    <!-- The styles are linked here, not imported from JavaScript, so the
+         browser has them before it draws anything. Importing them from
+         main.js made the page flash unstyled on every refresh. -->
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <!-- The page is laid out like a survey map sheet: a title block, the song
+         picker as the map's legend, and a drawn planet with its key. -->
+    <div class="sheet">
+      <header class="sheet__title">
+        <h1>Orbitune</h1>
+        <p>Every song is a world. Go explore it.</p>
+      </header>
+
+      <!-- main.js puts the song picker in here. -->
+      <main id="app" class="sheet__picker"></main>
+
+      <div class="sheet__plate">
+        <figure class="map">
+          <!-- A drawing that explains the idea. It is not a planet the app made. -->
+          <!-- fill="none" is a safety net: a shape with no colour is drawn black,
+               so this keeps the map blank if the styles are ever slow to load.
+               The colours in style.css take over as soon as they arrive. -->
+          <svg viewBox="-44 0 688 600" fill="none" role="img" aria-labelledby="map-title map-desc">
+            <title id="map-title">Map of an example planet</title>
+            <desc id="map-desc">
+              A planet drawn as a map of flat coloured land on a blue sea. A line across the
+              middle is the song's timeline, from 0:00 to 0:30. Four numbered markers match
+              the list in the help section below.
+            </desc>
+            <defs>
+              <clipPath id="globe"><circle cx="300" cy="300" r="270" /></clipPath>
+            </defs>
+
+            <!-- Each "ink" group is one colour, printed in turn when the page loads. -->
+            <circle class="ink ink--sea" style="--pass: 0" cx="300" cy="300" r="270" />
+
+            <g class="ink ink--lavender" style="--pass: 1">
+              <polygon points="95,190 170,120 195,195" />
+              <polygon points="265,105 300,180 195,195" />
+              <polygon points="110,240 95,190 195,195" />
+              <polygon points="235,335 290,395 205,420" />
+              <polygon points="275,475 195,505 205,420" />
+              <polygon points="125,440 150,360 205,420" />
+            </g>
+            <g class="ink ink--mustard" style="--pass: 2">
+              <polygon points="170,120 265,105 195,195" />
+              <polygon points="250,260 160,275 195,195" />
+              <polygon points="430,170 515,215 435,300" />
+              <polygon points="420,420 345,365 435,300" />
+              <polygon points="325,285 350,215 435,300" />
+              <polygon points="380,470 440,460 400,535" />
+            </g>
+            <g class="ink ink--sage" style="--pass: 3">
+              <polygon points="300,180 250,260 195,195" />
+              <polygon points="160,275 110,240 195,195" />
+              <polygon points="545,300 505,390 435,300" />
+              <polygon points="345,365 325,285 435,300" />
+              <polygon points="150,360 235,335 205,420" />
+              <polygon points="440,460 455,515 400,535" />
+            </g>
+            <g class="ink ink--salmon" style="--pass: 4">
+              <polygon points="350,215 430,170 435,300" />
+              <polygon points="515,215 545,300 435,300" />
+              <polygon points="505,390 420,420 435,300" />
+              <polygon points="290,395 275,475 205,420" />
+              <polygon points="195,505 125,440 205,420" />
+            </g>
+
+            <!-- Line work: grid lines, coastlines, and the marks the key explains. -->
+            <g class="ink ink--line" style="--pass: 5">
+              <g class="map__grid" clip-path="url(#globe)">
+                <ellipse cx="300" cy="300" rx="95" ry="270" />
+                <ellipse cx="300" cy="300" rx="185" ry="270" />
+                <path d="M30 115H570M30 205H570M30 395H570M30 485H570" />
+              </g>
+              <g class="map__coast">
+                <polygon points="95,190 170,120 265,105 300,180 250,260 160,275 110,240" />
+                <polygon points="350,215 430,170 515,215 545,300 505,390 420,420 345,365 325,285" />
+                <polygon points="150,360 235,335 290,395 275,475 195,505 125,440" />
+                <polygon points="380,470 440,460 455,515 400,535" />
+              </g>
+              <!-- Hills and ridges -->
+              <path
+                class="map__mark"
+                d="M386 257l9-14 9 14M411 272l9-14 9 14M436 262l9-14 9 14M461 282l9-14 9 14M483 275l9-14 9 14"
+              />
+              <!-- Height contours -->
+              <g class="map__mark">
+                <polygon points="150,190 185,150 240,160 255,205 215,240 165,232" />
+                <polygon points="172,192 193,168 228,176 236,204 211,223 180,216" />
+              </g>
+              <!-- Fine surface detail -->
+              <g class="map__dots">
+                <circle cx="225" cy="400" r="1.7" /><circle cx="240" cy="412" r="1.7" />
+                <circle cx="255" cy="402" r="1.7" /><circle cx="232" cy="425" r="1.7" />
+                <circle cx="250" cy="430" r="1.7" /><circle cx="265" cy="420" r="1.7" />
+                <circle cx="243" cy="446" r="1.7" /><circle cx="260" cy="448" r="1.7" />
+                <circle cx="270" cy="436" r="1.7" /><circle cx="224" cy="442" r="1.7" />
+                <circle cx="238" cy="462" r="1.7" /><circle cx="255" cy="466" r="1.7" />
+              </g>
+              <circle class="map__limb" cx="300" cy="300" r="270" />
+            </g>
+
+            <!-- The equator is the song's timeline. -->
+            <g class="ink ink--equator" style="--pass: 6">
+              <path class="map__equator" pathLength="1" d="M-34 300H634" />
+              <text class="map__label" x="-38" y="289">0:00</text>
+              <text class="map__label" x="638" y="289" text-anchor="end">0:30</text>
+              <text class="map__label map__label--wide" x="266" y="290" text-anchor="middle">SONG TIME</text>
+            </g>
+
+            <!-- Numbered markers, matched by the list under the map. -->
+            <g class="ink ink--markers" style="--pass: 7" aria-hidden="true">
+              <g><circle cx="276" cy="222" r="14" /><text x="276" y="228">1</text></g>
+              <g><circle cx="462" cy="224" r="14" /><text x="462" y="230">2</text></g>
+              <g><circle cx="182" cy="452" r="14" /><text x="182" y="458">3</text></g>
+              <g><circle cx="232" cy="176" r="14" /><text x="232" y="182">4</text></g>
+            </g>
+          </svg>
+          <!-- Always visible, so nobody takes the drawing for a planet the app made. -->
+          <figcaption>Example map</figcaption>
+        </figure>
+
+        <!-- Help, closed until clicked. <details> opens and closes by itself,
+             so it needs no JavaScript. -->
+        <details class="key">
+          <summary class="key__summary">
+            <span class="key__badge" aria-hidden="true">?</span>
+            <h2>Help: how a song becomes a world</h2>
+            <span class="key__arrow" aria-hidden="true"></span>
+          </summary>
+          <ol class="key__list">
+            <li>Bass shapes the continents</li>
+            <li>Mids raise hills and ridges</li>
+            <li>Treble adds fine surface detail</li>
+            <li>Loudness sets the height</li>
+          </ol>
+          <div class="key__foot">
+            <div class="scale" role="img" aria-label="Scale bar: 0 to 30 seconds of song">
+              <div class="scale__bar"><i></i><i></i><i></i></div>
+              <div class="scale__ticks"><span>0</span><span>10</span><span>20</span><span>30</span></div>
+              <div class="scale__unit">Seconds of song</div>
+            </div>
+            <p>Song time runs once around the equator. The map above is an illustration, not a real planet.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
