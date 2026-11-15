@@ -1,0 +1,6 @@
+librosa
+numpy
+python-dotenv
+google-genai
+pydantic
+scipy

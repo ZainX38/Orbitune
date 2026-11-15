@@ -8,7 +8,10 @@ from google import genai
 from pydantic import BaseModel
 from scipy.signal import find_peaks
 
-load_dotenv()
+import argparse
+from pathlib import Path
+
+load_dotenv(Path(__file__).with_name(".env"))
 client = genai.Client()
 
 NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -177,17 +180,42 @@ Make everything consistent with the music."""
 
 ############################## test it by running: py analyse.py
 
+def generate_planet_data(path):
+    return {
+        "world": generate_world(path),
+        "audio": get_audio_data(path),
+    }
+
+
 if __name__ == "__main__":
-    world = generate_world("song.mp3")
-    audio = get_audio_data("song.mp3")
+    parser = argparse.ArgumentParser(
+        description="Analyse a song into Orbitune planet data."
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default="song.mp3",
+        help="audio file to analyse",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="print one combined JSON result for the Node server",
+    )
+    args = parser.parse_args()
 
-    with open("world.json", "w") as f:
-        json.dump(world, f, indent=2)
-    with open("audio.json", "w") as f:
-        json.dump(audio, f, indent=2)
+    planet_data = generate_planet_data(args.path)
 
-    print(json.dumps(world, indent=2))
-    print(json.dumps(audio, indent=2))
-    print("Saved world.json and audio.json") 
+    if args.json:
+        print(json.dumps(planet_data))
+    else:
+        # Keeps the old manual workflow available.
+        with open("world.json", "w") as f:
+            json.dump(planet_data["world"], f, indent=2)
+
+        with open("audio.json", "w") as f:
+            json.dump(planet_data["audio"], f, indent=2)
+
+        print("Saved world.json and audio.json")
 
 #new

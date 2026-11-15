@@ -149,3 +149,6 @@ vite.config.ts.timestamp-*
 .turbo
 
 server/cache/
+
+server/Lib
+server/Scripts
