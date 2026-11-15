@@ -42,6 +42,8 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping; // believable light: bright areas roll off instead of clipping
 renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true; // the planet's sun casts soft shadows (switch: SHADOWS in world/planet.js)
+renderer.shadowMap.type = THREE.PCFShadowMap;
 document.body.prepend(renderer.domElement);
 
 const SPACE = new THREE.Color('#05060d');

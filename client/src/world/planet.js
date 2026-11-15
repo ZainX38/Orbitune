@@ -22,6 +22,8 @@ import { createIcosphere } from './sphere.js';
 import { fbm } from './noise.js';
 
 const DETAIL = 64; // icosphere subdivisions: 20 * (DETAIL+1)^2 faces (~85k). Lower if slow (50 = ~52k, 40 = ~34k).
+const SHADOWS = true;    // soft sun shadows. Set to false if the frame rate drops (they draw the whole world a second time)
+const SHADOW_MAP = 2048; // shadow map size in pixels: one pixel is about 0.07 units of ground
 const SUN_FOLLOWS_LISTENER = true; // the sun stays ahead (east) of the listener, so where you are is always lit
 
 export function createPlanet(features, blueprint) {
@@ -118,6 +120,23 @@ export function createPlanet(features, blueprint) {
   const east = new THREE.Vector3();
   sun.position.copy(sunDirection).multiplyScalar(RADIUS * 6);
   group.add(sun, sun.target); // target stays at the planet's centre
+
+  // ---------- Soft shadows from the sun (needs renderer.shadowMap.enabled = true, see mvp/main.js) ----------
+  // One shadow map over the whole sunlit side of the planet. Hills, trees, rocks and clouds cast onto the ground.
+  if (SHADOWS) {
+    const reach = RADIUS + 22; // the planet plus its clouds
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+    Object.assign(sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: RADIUS * 6 - reach, far: RADIUS * 6 + reach });
+    sun.shadow.camera.updateProjectionMatrix();
+    sun.shadow.radius = 2.5;      // blur
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.12; // stops smooth slopes that face away from the sun from shadowing themselves in stripes
+    ground.castShadow = ground.receiveShadow = true;
+    for (const mesh of [...flora.group.children, ...rocks.group.children]) mesh.castShadow = mesh.receiveShadow = true;
+    for (const mesh of clouds.group.children) mesh.castShadow = true;
+    for (const l of landmarks) l.marker.castShadow = true;
+  }
 
   // ---------- Live reactions (light and colour only: the ground never moves) ----------
   const baseGlow = glowColour.clone(), hotGlow = glowColour.clone().lerp(pal.peaks, 0.6);
