@@ -118,6 +118,7 @@ const ui = {
   time: document.getElementById('song-time'),
   progress: document.querySelector('#progress > div'),
   hint: document.getElementById('hint'),
+  back: document.getElementById('back'),
   buttons: DEMO_SONGS.map((s, i) => {
     const button = document.createElement('button');
     button.textContent = s.title;
@@ -129,6 +130,16 @@ const ui = {
   }),
 };
 let hintText = null, timeText = null, loadError = null;
+
+// Back to the start page. A full navigation (not history.back) so it also works after a direct link or a refresh.
+// Stop the music and free the planet first, so no sound keeps playing while the page unloads.
+for (const type of ['pointerdown', 'pointerup']) ui.back.addEventListener(type, (e) => e.stopPropagation());
+ui.back.addEventListener('click', (e) => {
+  e.stopPropagation();
+  loadId++; // cancel any load still running
+  teardown();
+  location.assign('/');
+});
 const clockText = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
 function updateHud() {
@@ -136,6 +147,8 @@ function updateHud() {
   if (mode === 'orbit' && !music?.playing) hint = HINTS.start;
   if (mode === 'surface' && !player.locked) hint = HINTS.surfaceNoLock;
   if (hint !== hintText) ui.hint.textContent = hintText = hint;
+  const hideBack = !planet || mode === 'loading';
+  if (ui.back.hidden !== hideBack) ui.back.hidden = hideBack;
 
   if (!music) return;
   const text = `${clockText(songTime)} / ${clockText(music.duration)}`;
@@ -227,6 +240,14 @@ function onBeat() {
   planet?.onBeat(1);
 }
 
+function teardown() {
+  if (!planet) return;
+  if (player.enabled) player.disable();
+  music.dispose();
+  planet.dispose();
+  planet = player = music = marker = null;
+}
+
 async function loadSong(next, journey = null) {
   if (song?.id === next.id) return;
   loadError = null;
@@ -237,13 +258,7 @@ async function loadSong(next, journey = null) {
   });
   console.log(`[mvp] loading "${next.title}"`);
 
-  // Tear down the old world first
-  if (planet) {
-    if (player.enabled) player.disable();
-    music.dispose();
-    planet.dispose();
-    planet = player = music = marker = null;
-  }
+  teardown(); // the old world goes first
   move = null;
   resetView();
   setMode('loading');
