@@ -149,3 +149,8 @@ vite.config.ts.timestamp-*
 .turbo
 
 server/cache/
+
+# Design tool working files (kept on this machine only)
+.impeccable/
+DESIGN.md
+PRODUCT.md

@@ -8,8 +8,7 @@ from google import genai
 from pydantic import BaseModel
 from scipy.signal import find_peaks
 
-load_dotenv()
-client = genai.Client()
+load_dotenv()  # reads GEMINI_API_KEY from a .env file in this folder or the project folder
 
 NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
@@ -164,6 +163,9 @@ Rules:
 - narratorStyle: one line describing a storyteller's voice.
 Make everything consistent with the music."""
 
+    # The Gemini client is created here, not at the top of the file, so the
+    # audio analysis above still works on a machine that has no API key yet.
+    client = genai.Client()
     response = client.models.generate_content(
         model="gemini-3.5-flash",
         contents=prompt,
@@ -175,19 +177,28 @@ Make everything consistent with the music."""
     return response.parsed.model_dump()
 
 
-############################## test it by running: py analyse.py
+############################## run it with: python analyse.py path/to/song.mp3
+#
+# The Express server (index.js) runs this file once per song and reads what it
+# prints. So the ONLY thing printed to the normal output must be one block of
+# JSON. Anything else (warnings, debug notes) has to go to sys.stderr, or the
+# server will not be able to read the result.
 
 if __name__ == "__main__":
-    world = generate_world("song.mp3")
-    audio = get_audio_data("song.mp3")
+    import sys
 
-    with open("world.json", "w") as f:
-        json.dump(world, f, indent=2)
-    with open("audio.json", "w") as f:
-        json.dump(audio, f, indent=2)
+    if len(sys.argv) < 2:
+        sys.exit("Usage: python analyse.py path/to/song.mp3")
+    path = sys.argv[1]  # the file path Express passes in
 
-    print(json.dumps(world, indent=2))
-    print(json.dumps(audio, indent=2))
-    print("Saved world.json and audio.json") 
+    result = {"audio": get_audio_data(path), "world": None}
 
-#new
+    # The world needs Gemini. If that fails (no API key, no internet, quota),
+    # still send back the audio data, with the reason in "worldError".
+    try:
+        result["world"] = generate_world(path)
+    except Exception as error:
+        result["worldError"] = str(error)
+        print(f"generate_world failed: {error}", file=sys.stderr)
+
+    print(json.dumps(result))

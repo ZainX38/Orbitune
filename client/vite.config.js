@@ -12,6 +12,7 @@ export default {
     proxy: {
       '/search': 'http://localhost:3000',
       '/audio': 'http://localhost:3000',
+      '/analyse': 'http://localhost:3000',
     },
   },
 };

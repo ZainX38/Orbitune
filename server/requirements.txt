@@ -1,0 +1,8 @@
+# The Python libraries analyse.py needs. Install them all with:
+#   python -m pip install -r requirements.txt
+librosa
+numpy
+scipy
+python-dotenv
+google-genai
+pydantic
