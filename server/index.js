@@ -11,6 +11,10 @@ import { analyseAudio } from './analyse.js';
 import { planetsRouter } from './planets.js';
 
 const app = express();
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+app.use(express.static(path.join(here, '..', 'client', 'dist')));
+
 const envFile = path.join(path.dirname(fileURLToPath(import.meta.url)), '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
