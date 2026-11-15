@@ -8,7 +8,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPlanet } from '../world/planet.js';
 import { createPlayer, PLAYER_SCALE } from '../experience/player.js';
-import { createSongPosition } from '../experience/songPosition.js';
+import { createSongPosition, activeSources } from '../experience/songPosition.js';
+import { createFpsMeter, createDebugOverlay } from './debugOverlay.js';
 import { analyseSong } from './tempAnalysis.js';
 import { DEMO_SONGS, makeBlueprint } from './demoBlueprints.js';
 
@@ -398,16 +399,43 @@ function checkLandmarks() {
   });
 }
 
-// ---------- Debug: height above the ground every 2 s, measured from the real camera position ----------
+// ---------- Debug: height above the ground, measured from the real camera position ----------
+function heightAboveGround() {
+  local.copy(camera.position).applyMatrix4(planetInverse());
+  const r = local.length();
+  return r - planet.radius - planet.getHeight(local.divideScalar(r));
+}
+
 let heightTimer = 0;
 function logHeight(dt) {
   heightTimer += dt;
   if (heightTimer < 2) return;
   heightTimer = 0;
-  local.copy(camera.position).applyMatrix4(planetInverse());
-  const r = local.length();
-  const above = r - planet.radius - planet.getHeight(local.divideScalar(r));
-  console.log(`[mvp] height above ground: ${above.toFixed(3)} (eye height ${player.eyeHeight})`);
+  console.log(`[mvp] height above ground: ${heightAboveGround().toFixed(3)} (eye height ${player.eyeHeight})`);
+}
+
+// ---------- Debug overlay (F3): everything needed to test by hand ----------
+const fpsMeter = createFpsMeter();
+const overlay = createDebugOverlay();
+const num = (x, digits = 2) => x.toFixed(digits);
+function overlayLines() {
+  const info = renderer.info.render;
+  const lines = [
+    `fps        ${num(fpsMeter.fps, 0)}   (worst frame ${num(fpsMeter.worst, 0)} ms)`,
+    `triangles  ${info.triangles.toLocaleString('en')}   draw calls ${info.calls}`,
+    `mode       ${mode}`,
+  ];
+  if (!planet || !music) return lines;
+  const at = planet.timeAt(listener);
+  const since = music.sinceSync;
+  lines.push(
+    `song       ${num(songTime)} / ${num(music.duration)} s   longitude ${num(songTime / music.duration, 3)}`,
+    `listener   longitude ${num(at / planet.duration, 3)} = ${num(at)} s   (${music.free ? 'the playhead' : 'you'})`,
+    `last sync  ${since === null ? 'none yet' : `${num(since, 1)} s ago`}   syncs ${music.syncs}`,
+    `sources    ${activeSources()}   ${music.playing ? 'playing' : 'not playing'}`,
+    `height     ${num(heightAboveGround(), 3)} above ground   (eye height ${num(player.eyeHeight, 3)})`,
+  );
+  return lines;
 }
 
 // ---------- Frame loop ----------
@@ -423,6 +451,7 @@ let last = performance.now();
 renderer.setAnimationLoop((now) => {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
+  fpsMeter.tick(now);
   beatPulse *= Math.exp(-dt * 6);
 
   if (planet && mode !== 'loading') {
@@ -451,13 +480,14 @@ renderer.setAnimationLoop((now) => {
 
   updateHud();
   renderer.render(scene, camera);
+  overlay.update(now, overlayLines); // after the render, so the triangle count is this frame's
 });
 
 loadSong(0);
 
 // Handy in the browser console while testing
 window.mvp = {
-  camera, scene, renderer, land, takeOff, loadSong,
+  camera, scene, renderer, land, takeOff, loadSong, overlay, fpsMeter, activeSources,
   get planet() { return planet; }, get player() { return player; }, get music() { return music; },
   get mode() { return mode; }, get songTime() { return songTime; },
 };

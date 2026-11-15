@@ -26,6 +26,11 @@ const DEBUG = true;
 
 const mod = (a, n) => ((a % n) + n) % n;
 
+// Every source that exists right now, over ALL songs (also one that was disposed a moment ago).
+// 1 while playing, 2 only during a crossfade, 0 while a song loads. Anything else is a leak: the debug overlay shows it.
+let live = 0;
+export const activeSources = () => live;
+
 // Equal-power fade curves: two unrelated parts of the song keep the same loudness through the crossfade
 const CURVE_IN = Float32Array.from({ length: 32 }, (_, i) => Math.sin((i / 31) * Math.PI / 2));
 const CURVE_OUT = Float32Array.from({ length: 32 }, (_, i) => Math.cos((i / 31) * Math.PI / 2));
@@ -48,6 +53,8 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
   let free = true;
   let anchor = null;        // the listener's song time at the last sync (null = take it from the next update)
   let lastJump = -1;
+  let lastSync = null;      // context time of the last re-sync (null = none yet)
+  let syncs = 0;            // how many re-syncs so far
   let lastTime = 0;         // song time at the previous update (for firing beats)
   let logTimer = 0;
   let listenerTime = 0;
@@ -70,6 +77,15 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     v.source.stop(when + FADE + 0.02);
   }
 
+  // A voice is over: take it out of the audio graph. Safe to call twice.
+  function retire(v) {
+    if (!voices.delete(v)) return;
+    live--;
+    v.source.onended = null;
+    try { v.source.stop(); } catch { /* already stopped */ }
+    v.source.disconnect(); v.gain.disconnect();
+  }
+
   // Start a new source at `offset` and fade every other one out underneath it
   function play(offset) {
     const when = ctx.currentTime;
@@ -85,11 +101,9 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     source.start(when, mod(offset, duration));
 
     const v = { source, gain, startedAt: when, offset: mod(offset, duration), stopping: false };
-    source.onended = () => {
-      source.disconnect(); gain.disconnect();
-      voices.delete(v);
-    };
+    source.onended = () => retire(v);
     voices.add(v);
+    live++;
     voice = v;
     lastJump = when;
   }
@@ -143,6 +157,7 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
           log(`re-sync: ${time.toFixed(2)}s -> ${target.toFixed(2)}s (listener at ${listenerTime.toFixed(2)}s)`);
           play(target);
           lastTime = time = target;
+          lastSync = ctx.currentTime; syncs++;
         }
       }
     }
@@ -164,8 +179,7 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     voice = null;
     // Whatever happens to the sources (a suspended context never fires onended), nothing reaches the speakers after this
     setTimeout(() => {
-      for (const v of voices) { try { v.source.stop(); } catch { /* already stopped */ } v.source.disconnect(); v.gain.disconnect(); }
-      voices.clear();
+      for (const v of [...voices]) retire(v);
       master.disconnect();
     }, (FADE + 0.1) * 1000);
   }
@@ -176,6 +190,8 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     get playing() { return !!voice && ctx.state === 'running'; },
     get free() { return free; },
     get sources() { return voices.size; }, // 1 while playing, 2 only during a crossfade
+    get sinceSync() { return lastSync === null ? null : ctx.currentTime - lastSync; }, // seconds since the music last jumped to the listener
+    get syncs() { return syncs; },
     duration, beat,
   };
 }
