@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Orbitune MVP</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #05060d; }
+      body { font: 500 15px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #f2f3f7; }
+      canvas { display: block; }
+      .panel { position: fixed; user-select: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55); }
+
+      #info { left: 28px; top: 24px; pointer-events: none; }
+      #planet-name { font-size: 30px; font-weight: 650; letter-spacing: 0.01em; line-height: 1.1; }
+      #song-name { margin-top: 6px; opacity: 0.8; }
+      #song-time { margin-top: 10px; font-variant-numeric: tabular-nums; opacity: 0.8; }
+      #progress { margin-top: 6px; width: 220px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
+      #progress > div { height: 100%; width: 0; background: #fff; }
+
+      #songs { right: 28px; top: 24px; display: flex; gap: 8px; }
+      #songs button {
+        font: inherit; color: inherit; cursor: pointer;
+        padding: 9px 16px; border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.35); background: rgba(8, 9, 18, 0.5);
+        backdrop-filter: blur(6px); transition: background 0.2s, border-color 0.2s, color 0.2s;
+      }
+      #songs button:hover { border-color: #fff; }
+      #songs button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+      #songs button[aria-pressed='true'] { background: #f2f3f7; color: #0a0b14; border-color: #f2f3f7; text-shadow: none; }
+      #songs button:disabled { opacity: 0.5; cursor: progress; }
+
+      #hint {
+        left: 50%; bottom: 30px; transform: translateX(-50%);
+        padding: 10px 20px; border-radius: 999px; white-space: nowrap;
+        background: rgba(8, 9, 18, 0.55); backdrop-filter: blur(6px);
+        pointer-events: none; transition: opacity 0.3s;
+      }
+      #hint:empty { opacity: 0; }
+
+      @media (max-width: 640px) {
+        #songs { top: auto; bottom: 84px; right: 50%; transform: translateX(50%); }
+        #hint { white-space: normal; text-align: center; width: max-content; max-width: calc(100vw - 48px); border-radius: 18px; }
+        #planet-name { font-size: 24px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="info" class="panel">
+      <div id="planet-name"></div>
+      <div id="song-name"></div>
+      <div id="song-time"></div>
+      <div id="progress"><div></div></div>
+    </div>
+    <div id="songs" class="panel"></div>
+    <div id="hint" class="panel"></div>
+    <script type="module" src="/src/mvp/main.js"></script>
+  </body>
+</html>
