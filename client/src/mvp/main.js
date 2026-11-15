@@ -291,6 +291,7 @@ function land(localDirection) {
       setMode('surface');
       player.enable(); // keeps the spot set by place()
       nearby.clear();
+      stopNarration();
       heightTimer = 0;
     },
   };
@@ -367,12 +368,60 @@ addEventListener('resize', () => {
 
 // ---------- Landmarks: log once when the player comes near (Role 4: replace the log with narration) ----------
 const nearby = new Set();
+
+const narration = new Audio();
+let narrationRequest;
+let narrationUrl;
+
+function stopNarration() {
+    narrationRequest?.abort();
+    narrationRequest = undefined;
+    narration.pause();
+    narration.removeAttribute('src');
+
+    if (narrationUrl) {
+        URL.revokeObjectURL(narrationUrl);
+        narrationUrl = undefined;
+    }
+}
+
+async function playNarration(text) {
+    if (!text?.trim()) return;
+
+    stopNarration();
+    const request = new AbortController();
+    narrationRequest = request;
+
+    try {
+        const response = await fetch('/narrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+            signal: request.signal,
+        });
+
+        if (!response.ok) {
+            throw new Error(`Narration request returned ${response.status}`);
+        }
+
+        const audio = await response.blob();
+        if (request.signal.aborted) return;
+
+        narrationUrl = URL.createObjectURL(audio);
+        narration.src = narrationUrl;
+        await narration.play();
+    } catch (error) {
+        if (!request.signal.aborted) {
+            console.error('Could not play landmark narration:', error);
+        }
+    }
+}
 function checkLandmarks() {
   planet.landmarks.forEach((landmark, i) => {
     const distance = player.position.distanceTo(landmark.position); // both in the planet's own space
     if (distance < LANDMARK_RANGE && !nearby.has(i)) {
       nearby.add(i);
-      console.log(`[landmark] ${landmark.name} (${landmark.kind}): ${landmark.lore}`);
+      void playNarration(landmark.lore);;
     } else if (distance > LANDMARK_RANGE * 1.25 && nearby.has(i)) {
       nearby.delete(i); // left: it can trigger again on the next visit
     }

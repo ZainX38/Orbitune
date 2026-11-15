@@ -10,7 +10,7 @@ import { unlink } from 'node:fs/promises';
 
 const app = express();
 
-// GET /search?q=daft punk  →  a list of matching songs.
+// GET /search?q=daft punk  ÔåÆ  a list of matching songs.
 app.get('/search', async (req, res) => {
   // req.query holds everything after the `?` in the address.
   // `?? ''` means "use an empty string if q is missing".
@@ -52,7 +52,7 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 });
 
-// POST /analyse  →  runs analyse.py on the uploaded song and returns its JSON.
+// POST /analyse  ÔåÆ  runs analyse.py on the uploaded song and returns its JSON.
 app.post('/analyse', upload.single('audio'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No audio file sent' });
 
@@ -82,5 +82,43 @@ app.post('/analyse', upload.single('audio'), (req, res) => {
   });
 });
 
+
+app.post('/narrate', express.json({ limit: '8kb' }), async (req, res) => {
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+
+    if (!text || text.length > 1000) {
+        return res.status(400).json({ error: 'Send 1ÔÇô1000 characters of lore.' });
+    }
+
+    const { ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID } = process.env;
+    if (!ELEVENLABS_API_KEY || !ELEVENLABS_VOICE_ID) {
+        return res.status(503).json({ error: 'Narration credentials are missing.' });
+    }
+
+    try {
+        const response = await fetch(
+            `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(ELEVENLABS_VOICE_ID)}`,
+            {
+                method: 'POST',
+                headers: {
+                    'xi-api-key': ELEVENLABS_API_KEY,
+                    'Content-Type': 'application/json',
+                    Accept: 'audio/mpeg',
+                },
+                body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2' }),
+            },
+        );
+
+        if (!response.ok) {
+            console.error('ElevenLabs narration request failed:', response.status);
+            return res.status(502).json({ error: 'ElevenLabs could not generate narration.' });
+        }
+
+        res.type('audio/mpeg').send(Buffer.from(await response.arrayBuffer()));
+    } catch (error) {
+        console.error('Narration request failed:', error.message);
+        res.status(502).json({ error: 'Could not reach ElevenLabs.' });
+    }
+});
 
 app.listen(3000, () => console.log('Server running on http://localhost:3000'));
