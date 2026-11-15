@@ -15,6 +15,7 @@ import { createAtmosphere } from './atmosphere.js';
 import { createReactive } from './reactive.js';
 import { createClouds } from './clouds.js';
 import { createFlora } from './flora.js';
+import { createRocks } from './rocks.js';
 import { placeLandmarks } from './landmarks.js';
 import { createSurface } from './surface.js';
 import { createIcosphere } from './sphere.js';
@@ -104,6 +105,9 @@ export function createPlanet(features, blueprint) {
 
   const flora = createFlora(land, blueprint, pal, colours, reactive);
   group.add(flora.group);
+
+  const rocks = createRocks(land, pal, reactive);
+  group.add(rocks.group);
 
   const landmarks = placeLandmarks(group, land, blueprint, pal.peaks);
 
