@@ -12,6 +12,7 @@ import { QUALITY, QUALITY_LEVELS, DEFAULT_QUALITY, nextQuality, applyRendererQua
 import { createPlayer, PLAYER_SCALE } from '../experience/player.js';
 import { createSongPosition, activeSources } from '../experience/songPosition.js';
 import { getPlanetJourney } from '../experience/planetJourney.js';
+import { getPlanet } from '../api/planets.js';
 import { createFpsMeter, createDebugOverlay } from './debugOverlay.js';
 import { analyseSong } from './tempAnalysis.js';
 import { DEMO_SONGS, makeBlueprint } from './demoBlueprints.js';
@@ -311,7 +312,41 @@ function addJourneyButton(journey) {
   return next;
 }
 
+// A silent 16-bit mono WAV, so a planet with no stored audio still loads.
+function silentWav(seconds) {
+  const rate = 8000;
+  const samples = Math.max(1, Math.round((seconds || 1) * rate));
+  const view = new DataView(new ArrayBuffer(44 + samples * 2));
+  const text = (offset, s) => [...s].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)));
+  text(0, 'RIFF'); view.setUint32(4, 36 + samples * 2, true); text(8, 'WAVE');
+  text(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  text(36, 'data'); view.setUint32(40, samples * 2, true);
+  return new Blob([view], { type: 'audio/wav' });
+}
+
+async function openSavedPlanet(id) {
+  const { song = {}, features, blueprint } = await getPlanet(id);
+  let blob = null;
+  if (song.deezerId) {
+    const res = await fetch(`/audio/${encodeURIComponent(song.deezerId)}`);
+    if (res.ok) blob = await res.blob();
+  }
+  const journey = { audio: features, world: blueprint, title: song.title, artist: song.artist, blob: blob ?? silentWav(features?.duration) };
+  const next = addJourneyButton(journey);
+  await loadSong(next, journey);
+}
+
 async function startExperience() {
+  if (params.get('planet')) {
+    try {
+      await openSavedPlanet(params.get('planet'));
+    } catch (error) {
+      console.error('[mvp] could not open the saved planet', error);
+      loadError = 'Could not load that planet. Please return and try again.';
+    }
+    return;
+  }
   if (params.get('journey') !== 'latest') {
     await loadSong(DEMO_SONGS[0]);
     return;
