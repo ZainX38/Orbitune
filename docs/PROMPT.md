@@ -107,7 +107,6 @@ json
   "planetName": "Velmora",
   "mood": "melancholic",
   "biome": "misty tundra",
-  "palette": { "ground": "#6b7f8e", "peaks": "#e8eef2", "sky": "#2a3550", "fog": "#9fb0c0" },
   "flora": ["crystal pines", "glow moss"],
   "sections": [
     { "type": "verse", "start": 0, "end": 8 },
@@ -135,8 +134,17 @@ json
   "loudness": [0.22, 0.25, 0.47],
   "beats": [0.62, 1.25, 1.88],
   "peaks": [{ "hz": 110, "strength": 0.9 }, { "hz": 880, "strength": 0.6 }, { "hz": 3520, "strength": 0.4 }],
-  "atmosphere": "#4a7fd1"
+  "atmosphere": "#4a7fd1",
+  "spectrum": {
+    "chroma": [0.5, 0.78, 0.75, 0.9, 0.93, 0.54, 0.65, 0.65, 1, 0.5, 0.63, 0.72],
+    "bands": { "bass": 0.55, "mid": 0.3, "treble": 0.15 },
+    "curve": [0.5, 0.72, 1, 0.85],
+    "energy": 0.44
+  },
+  "spectrumPalette": { "ground": "#1f3852", "peaks": "#48eeba", "sky": "#08152d", "fog": "#1d345d", "atmosphere": "#3a7bee" }
 }
+
+The planet's colours come from `spectrum` (client/src/world/spectrumPalette.js), not from Gemini. `spectrumPalette` is stored with the features so every view draws the same planet. `curve` (24 log-spaced bands, 40 Hz–10 kHz) is kept for a later, closer absorption-spectrum model. `atmosphere` is legacy. The Blueprint has no `palette` any more; older planets that have one still use it as a last fallback.
 Contract 3: getHeight (Role 3 → Role 4)
 js
 // direction: THREE.Vector3 (normalised). Returns terrain height above the base radius (50).
@@ -179,7 +187,8 @@ Treble band	Fine surface detail	world/terrain.js	Role 3
 Loudness	Ridge along the equator	world/terrain.js	Role 3
 Top frequency peaks → wavelengths	Atmosphere colour (sky, rim glow, fog)	audio/spectrum.js	Role 2
 Beats (live)	Glow pulse on atmosphere + landmarks	audio/beats.js → planet.onBeat()	Roles 2 + 3
-Gemini mood, palette, sections	Biome colours, landmarks at chorus (mountain) and drop (canyon)	world/biome.js, world/landmarks.js	Role 3
+Chroma + band balance + loudness	Song spectrum palette: all biome colours, sky, fog, atmosphere	world/spectrumPalette.js, world/biome.js	Role 3
+Gemini mood, sections	Landmarks at chorus (mountain) and drop (canyon)	world/landmarks.js	Role 3
 Absorption-spectrum colour (Role 2)
 
 Real planets get their colour from what their atmosphere absorbs: methane absorbs red, so Neptune looks blue. We do the same with the song.

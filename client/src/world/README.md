@@ -87,10 +87,10 @@ plants (sway). `getHeight` and the ground mesh are fixed from the moment the pla
 | bass / mid / treble / loudness over time | continents / hills / fine detail / equator ridge along the longitude (as before) | `terrain.js` |
 | bpm + brightness of the whole song | the planet's **character**: fast, bright songs are jagged with broken coasts, slow warm songs have broad rolling land. Also how much sea there is. | `terrain.js` (`character`) |
 | Blueprint `sections` | chorus = mountain range, drop = canyon, on the equator at that song time (as before) | `terrain.js`, `landmarks.js` |
-| Blueprint `palette` (4 colours) | every colour in the world: sand, lowland patches, rock on steep slopes, peaks, water, clouds, sun and sky light. A dark `sky` colour makes a night planet (dimmer light, stronger glows). | `biome.js` |
+| the song spectrum palette (`ground`, `peaks`, `sky`, `fog`, `atmosphere`) | every colour in the world: sand, lowland patches, rock on steep slopes, peaks, water, clouds, sun and sky light. A dark `sky` colour makes a night planet (dimmer light, stronger glows). Computed from `features.spectrum` (pitch -> hue round the circle of fifths; bass/mid/treble balance, loudness and major/minor -> brightness, saturation, contrast, day or night). Order: `features.spectrumPalette`, then computed from `features.spectrum`, then a limited palette from the old `features.atmosphere` + bands, then the Blueprint's legacy `palette`. | `spectrumPalette.js`, `biome.js` |
 | Blueprint `flora` (free text) | 2 to 3 of these shapes, chosen by keywords: pine, blossom, palm, crystal, mushroom, reed. Unknown names fall back to pine + blossom. Every plant has its own size, turn, lean and colour tint. | `flora.js` |
 | the terrain itself | boulders and stones, more of them on slopes and high ground | `rocks.js` |
-| `features.atmosphere` | rim glow colour (blended with the palette) and a light tint on sky and fog | `biome.js`, `planet.js` |
+| palette `atmosphere` | rim glow colour (blended with the sky) and a light tint on sky and fog | `biome.js`, `planet.js` |
 | live: beats | light ripples from the listener, atmosphere + landmark pulse, glowing flora flash | `reactive.js` |
 | live: loudness / mids / treble at `songTime` | overall glow and saturation / flora sway / sky and glow tint | `reactive.js`, `planet.js` |
 
@@ -101,7 +101,8 @@ plants (sway). `getHeight` and the ground mesh are fixed from the moment the pla
 - `sphere.js`: the icosphere the ground is made of, with vertices shared between neighbouring triangles.
 - `surface.js`: `getHeight` (Contract 3): the exact height of the built mesh in any direction.
 - `shapes.js`: building blocks for objects: rounded blobs, lathe shapes, crystal shards, colour baked per vertex.
-- `biome.js`: all colours, derived from the Blueprint palette.
+- `spectrumPalette.js`: the song spectrum palette: the spectrum descriptor (`describeSpectrum`, mirrored in `server/analyse.py`), the palette itself, and `resolvePalette` (which palette a planet is drawn with). No three.js, tested with `npm test`.
+- `biome.js`: all colours, derived from the 4 base colours of the resolved palette.
 - `reactive.js`: the shared shader uniforms and shader patches: water waves, hemisphere light, beat ripples, sway.
 - `atmosphere.js`: rim glow seen from orbit + the sky dome seen from the surface.
 - `clouds.js`: drifting clouds, soft clusters of rounded puffs.
