@@ -1,3 +1,5 @@
+import { isPalette } from '../world/spectrumPalette.js';
+
 const HEX = /^#[0-9a-f]{6}$/i;
 const SECTION_TYPES = new Set(['intro', 'verse', 'chorus', 'drop', 'bridge', 'outro']);
 
@@ -49,12 +51,25 @@ export function validatePlanetData(data) {
     throw new Error('Audio JSON has an invalid atmosphere colour');
   }
 
+  // The song spectrum descriptor + palette (world/spectrumPalette.js). Optional: older planets do not have them.
+  const { spectrum, spectrumPalette } = audio;
+  if (spectrum !== undefined && !(
+    Array.isArray(spectrum?.chroma) && spectrum.chroma.length === 12
+    && spectrum.chroma.every((v) => isFiniteNumber(v) && v >= 0 && v <= 1)
+    && ['bass', 'mid', 'treble'].every((band) => isFiniteNumber(spectrum.bands?.[band]) && spectrum.bands[band] >= 0)
+  )) {
+    throw new Error('Audio JSON has an invalid spectrum');
+  }
+  if (spectrumPalette !== undefined && !isPalette(spectrumPalette)) {
+    throw new Error('Audio JSON has an invalid spectrum palette');
+  }
+
   const { planetName, mood, biome, palette, flora, sections, landmarks, ambiencePrompts, narratorStyle } = world;
 
   if (
     typeof planetName !== 'string' || !planetName
-    || !palette
-    || !['ground', 'peaks', 'sky', 'fog'].every((key) => HEX.test(palette[key] ?? ''))
+    // Gemini no longer picks colours: the palette is optional legacy data, but must be valid when present
+    || (palette !== undefined && palette !== null && !isPalette(palette, ['ground', 'peaks', 'sky', 'fog']))
   ) {
     throw new Error('World JSON has an invalid name or palette');
   }

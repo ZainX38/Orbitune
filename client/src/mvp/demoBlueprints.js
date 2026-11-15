@@ -1,5 +1,7 @@
 // Hand-written Blueprints (Contract 1) for the two demo songs, used until Role 2's /analyse (Gemini) works.
 // Only `sections` is computed: it comes from the analysed audio, so the landmark times match the real 30 s clip.
+// Colours are NOT hand-picked: like every song, the demos get the spectrum palette (world/spectrumPalette.js),
+// with the small artistic adjustment in PALETTE_ADJUST so they stay legible on a projector.
 //
 //   const blueprint = makeBlueprint('alors-on-danse', features);
 
@@ -14,7 +16,6 @@ const BLUEPRINTS = {
     planetName: 'Nuit Sans Fin',
     mood: 'hypnotic',
     biome: 'neon night basalt',
-    palette: { ground: '#3b2f8f', peaks: '#ff4fd8', sky: '#170b3a', fog: '#3a1f78' },
     flora: ['neon crystal spires', 'glow mushrooms', 'night pines'],
     landmarks: [
       {
@@ -35,7 +36,6 @@ const BLUEPRINTS = {
     planetName: 'Golden Reverie',
     mood: 'romantic',
     biome: 'sunset rose savanna',
-    palette: { ground: '#cf6a4e', peaks: '#ffe0a3', sky: '#ff9d7a', fog: '#ffc4a3' },
     flora: ['rose blossom trees', 'golden palms', 'sax reeds'],
     landmarks: [
       {
@@ -51,6 +51,15 @@ const BLUEPRINTS = {
     narratorStyle: 'warm, slow, intimate, late-night radio host',
   },
 };
+
+// Per-demo nudges on top of the computed palette (see buildPalette in world/spectrumPalette.js).
+// The hue still comes from the song: these only keep the presentation look.
+const PALETTE_ADJUST = {
+  // alors-on-danse: none needed. Its spectrum already gives a deep-blue night planet
+  'careless-whisper': { hue: -50 }, // its yellow-green turned to gold: the warm sunset look
+};
+
+export const demoPaletteAdjust = (songId) => PALETTE_ADJUST[songId];
 
 // ---------- Sections from the analysis ----------
 const CHORUS_SECONDS = 6, DROP_SECONDS = 4, JUMP_SECONDS = 2, MIN_GAP_SECONDS = 6;
@@ -108,7 +117,7 @@ export function makeBlueprint(songId, features) {
   const base = BLUEPRINTS[songId];
   if (!base) throw new Error(`No demo blueprint for "${songId}"`);
   const blueprint = { ...structuredClone(base), sections: deriveSections(features) };
-  const { planetName, mood, biome, palette, flora, sections, landmarks, ambiencePrompts, narratorStyle } = blueprint;
+  const { planetName, mood, biome, flora, sections, landmarks, ambiencePrompts, narratorStyle } = blueprint;
   console.log('[blueprint]', planetName, '| sections', sections.map((s) => `${s.type} ${s.start}-${s.end}s`).join(', '));
-  return { planetName, mood, biome, palette, flora, sections, landmarks, ambiencePrompts, narratorStyle }; // Contract 1 key order
+  return { planetName, mood, biome, flora, sections, landmarks, ambiencePrompts, narratorStyle }; // Contract 1 key order (no palette)
 }

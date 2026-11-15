@@ -2,12 +2,15 @@
 // TEMPORARY audio analyser for the MVP page. TO BE REPLACED by Role 2's client/src/audio/ module.
 // ============================================================================================
 // Output is AudioFeatures exactly as in Contract 2 of docs/PROMPT.md:
-//   { duration, bpm, frames, bass[], mid[], treble[], loudness[], beats[], peaks[], atmosphere }
+//   { duration, bpm, frames, bass[], mid[], treble[], loudness[], beats[], peaks[], atmosphere,
+//     spectrum, spectrumPalette }   <- see world/spectrumPalette.js
 // Everything runs in the browser: decodeAudioData + a small FFT. No npm packages.
 //
 //   const { features, audioBuffer } = await analyseSong(arrayBuffer, audioContext);
 //
 // analyseSamples(samples, sampleRate) is the same thing without the browser (used for tests in Node).
+
+import { describeSpectrum, withSpectrumPalette } from '../world/spectrumPalette.js';
 
 const FRAMES = 512;
 const FFT_SIZE = 4096;                 // for the bands: ~11 Hz per bin at 44.1 kHz
@@ -192,19 +195,23 @@ export function analyseSamples(samples, sampleRate) {
   const bands = analyseBands(samples, sampleRate);
   const { bpm, beats } = analyseBeats(samples, sampleRate, duration);
   const peaks = findPeaks(bands.average, bands.hzPerBin);
-  const features = {
+  const loudness = normalise(bands.loudness); // 0..1 against the 99th percentile, like spectrum.energy in analyse.py
+  const spectrum = describeSpectrum(bands.average, bands.hzPerBin);
+  spectrum.energy = +(loudness.reduce((a, b) => a + b, 0) / loudness.length).toFixed(3);
+  const features = withSpectrumPalette({
     duration: +duration.toFixed(3),
     bpm,
     frames: FRAMES,
     bass: normalise(bands.bass),
     mid: normalise(bands.mid),
     treble: normalise(bands.treble),
-    loudness: normalise(bands.loudness),
+    loudness,
     beats,
     peaks,
-    atmosphere: atmosphereColour(peaks),
-  };
-  if (DEBUG) console.log('[tempAnalysis]', `${features.duration}s, ${bpm} bpm, ${beats.length} beats, first beat ${beats[0]}s, peaks`, peaks.map((p) => `${p.hz}Hz`).join(' '), 'atmosphere', features.atmosphere);
+    atmosphere: atmosphereColour(peaks), // legacy single colour, kept for older readers
+    spectrum,
+  });
+  if (DEBUG) console.log('[tempAnalysis]', `${features.duration}s, ${bpm} bpm, ${beats.length} beats, first beat ${beats[0]}s, peaks`, peaks.map((p) => `${p.hz}Hz`).join(' '), 'palette', features.spectrumPalette);
   return features;
 }
 

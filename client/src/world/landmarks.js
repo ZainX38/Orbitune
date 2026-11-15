@@ -27,7 +27,7 @@ const SHARDS = [
 const cluster = (thin, shade) => mergeGeometries(SHARDS.map(([r, h, x, z, rz, rx, ry]) =>
   part(shard(r * thin, h * (0.55 + 0.45 * thin), 0.26), WHITE, 0, { x, z, rz, rx, ry, facet: true, shade })));
 
-export function placeLandmarks(group, terrain, blueprint, colour = blueprint.palette.peaks) {
+export function placeLandmarks(group, terrain, blueprint, colour = blueprint.palette?.peaks ?? '#e8eef2') {
   const out = [];
   const tint = new THREE.Color(colour);
   const shellGeometry = cluster(1, 0.5), coreGeometry = cluster(0.5, 0);

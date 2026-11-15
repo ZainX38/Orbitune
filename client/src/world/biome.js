@@ -1,5 +1,6 @@
-// Colours from the Blueprint palette (Gemini) + the atmosphere colour (Role 2's absorption spectrum).
-// The palette only has 4 colours (ground, peaks, sky, fog). Everything else (sand, rock, lush patches,
+// Colours from the song spectrum palette (spectrumPalette.js: ground, peaks, sky, fog, atmosphere), computed from
+// the music. planet.js picks the palette with resolvePalette(); old planets fall back to the Blueprint palette.
+// Only 4 of the colours shape the ground (ground, peaks, sky, fog). Everything else (sand, rock, lush patches,
 // water, light colours) is derived from them here, so any palette gives a complete, matching world.
 
 import * as THREE from 'three';
@@ -14,7 +15,7 @@ export function tintLike(base, tint, gain = 1) {
   return tint.clone().multiplyScalar(Math.min(1, (gain * luminance(base)) / Math.max(luminance(tint), 1e-4)));
 }
 
-// All the colours the world needs, derived from the 4 palette colours
+// All the colours the world needs, derived from 4 palette colours (any extra keys are ignored)
 export function derivePalette(palette) {
   const ground = new THREE.Color(palette.ground);
   const peaks = new THREE.Color(palette.peaks);
@@ -72,17 +73,17 @@ export function waterColour(pal, depth, out) {
   return out.copy(pal.waterShallow).lerp(pal.waterDeep, smoothstep(0, 3.2, depth));
 }
 
-// Colours Role 4 needs for orbit vs surface view.
+// Colours Role 4 needs for orbit vs surface view. palette: the resolved 5-colour palette.
 // sky and fog are LIVE: planet.update() re-tints them every frame to follow the music.
-export function skyColours(blueprint, features) {
-  const sky = new THREE.Color(blueprint.palette.sky);
-  const atmosphere = new THREE.Color(features.atmosphere ?? blueprint.palette.sky);
-  const fog = new THREE.Color(blueprint.palette.fog);
+export function skyColours(palette) {
+  const sky = new THREE.Color(palette.sky);
+  const atmosphere = new THREE.Color(palette.atmosphere ?? palette.sky);
+  const fog = new THREE.Color(palette.fog);
   const tint = 0.1; // a touch of the song's hue. tintLike keeps the palette's own brightness, so dark skies stay dark and saturated
   return {
     space: new THREE.Color('#05060d').lerp(sky, 0.003),                      // orbit background
     sky: sky.clone().lerp(tintLike(sky, atmosphere), tint),                  // surface background
     fog: fog.clone().lerp(tintLike(fog, atmosphere), tint),                  // surface fog
-    atmosphere,                                                              // the song's own colour (Role 2)
+    atmosphere,                                                              // the song's most saturated colour
   };
 }

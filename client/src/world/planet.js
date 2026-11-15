@@ -6,12 +6,13 @@
 //   planet.onBeat();                                      // on every beat
 //   planet.setQuality('low');                             // lighter or heavier drawing, in place
 //   planet.dispose();                                     // before building another planet
-// Returns: group, getHeight (Contract 3), radius, landmarks, colours, onBeat(), update(), name,
+// Returns: group, getHeight (Contract 3), radius, landmarks, colours, palette, paletteSource, onBeat(), update(), name,
 //   dispose(), timeAt(dir), directionAt(time), duration, seaLevel, sun, quality, setQuality(name), groundError().
 
 import * as THREE from 'three';
 import { createTerrain, RADIUS, longitudeOf, directionOfLongitude } from './terrain.js';
 import { derivePalette, makeColourer, waterColour, skyColours } from './biome.js';
+import { resolvePalette } from './spectrumPalette.js';
 import { createAtmosphere } from './atmosphere.js';
 import { createReactive } from './reactive.js';
 import { createClouds } from './clouds.js';
@@ -30,8 +31,11 @@ const SUN_FOLLOWS_LISTENER = true; // the sun stays ahead (east) of the listener
 export function createPlanet(features, blueprint, { quality: startQuality = DEFAULT_QUALITY } = {}) {
   console.time('[planet] build');
   const terrain = createTerrain(features, blueprint);
-  const pal = derivePalette(blueprint.palette);
-  const colours = skyColours(blueprint, features);
+  // The song spectrum palette is the source of truth. blueprint.palette (Gemini) is only a legacy fallback
+  const { palette, source: paletteSource } = resolvePalette(features, blueprint);
+  console.log('[planet] palette from', paletteSource, JSON.stringify(palette));
+  const pal = derivePalette(palette);
+  const colours = skyColours(palette);
   const reactive = createReactive(features, pal, colours);
   const group = new THREE.Group();
   let quality = QUALITY[startQuality] ? startQuality : DEFAULT_QUALITY;
@@ -112,7 +116,7 @@ export function createPlanet(features, blueprint, { quality: startQuality = DEFA
   group.add(ground);
 
   // ---------- Everything on and around it ----------
-  // The song's own colour (Role 2), pulled towards the palette so the glow always suits the planet
+  // The palette's atmosphere colour, pulled towards the sky (or peaks at night) so the glow always suits the planet
   const glowColour = colours.atmosphere.clone().lerp(pal.night ? pal.peaks : pal.sky, 0.45);
   const atmosphere = createAtmosphere(RADIUS, glowColour, colours.fog, colours.sky);
   group.add(atmosphere.group);
@@ -250,7 +254,7 @@ export function createPlanet(features, blueprint, { quality: startQuality = DEFA
     `| ${Math.round(reference.water * 100)}% water`, '| flora:', flora.kinds.join(' + '), pal.night ? '| night planet' : '| day planet');
 
   return {
-    group, getHeight, radius: RADIUS, landmarks, colours, onBeat, update, name: blueprint.planetName,
+    group, getHeight, radius: RADIUS, landmarks, colours, palette, paletteSource, onBeat, update, name: blueprint.planetName,
     dispose, timeAt, directionAt, duration: features.duration, seaLevel: terrain.seaLevel, sun,
     setQuality, groundError, get quality() { return quality; },
   };

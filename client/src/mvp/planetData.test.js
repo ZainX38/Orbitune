@@ -44,3 +44,19 @@ test('rejects reversed section ranges', () => {
 
   assert.throws(() => validatePlanetData({ audio, world }), /invalid sections/);
 });
+
+
+
+test('accepts a world without a palette now that colours come from the spectrum', () => {
+  const { palette, ...world } = makeWorld([{ type: 'verse', start: 0, end: 12 }]);
+  const spectrum = { chroma: new Array(12).fill(0.5), bands: { bass: 0.5, mid: 0.4, treble: 0.1 }, curve: [], energy: 0.5 };
+  const spectrumPalette = { ground: '#123456', peaks: '#234567', sky: '#345678', fog: '#456789', atmosphere: '#56789a' };
+  const result = validatePlanetData({ audio: { ...audio, spectrum, spectrumPalette }, world });
+  assert.equal(result.world.palette, undefined);
+});
+
+test('rejects an invalid spectrum palette or spectrum', () => {
+  const world = makeWorld([{ type: 'verse', start: 0, end: 12 }]);
+  assert.throws(() => validatePlanetData({ audio: { ...audio, spectrumPalette: { ground: 'red' } }, world }), /spectrum palette/);
+  assert.throws(() => validatePlanetData({ audio: { ...audio, spectrum: { chroma: [1] } }, world }), /spectrum/);
+});

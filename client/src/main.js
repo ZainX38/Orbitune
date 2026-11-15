@@ -5,6 +5,7 @@ import { savePlanetJourney } from './experience/planetJourney.js';
 import { savePlanet } from './api/planets.js';
 import { createGalaxy } from './ui/galaxy.js';
 import { createStarfield } from './ui/starfield.js';
+import { withSpectrumPalette } from './world/spectrumPalette.js';
 
 createStarfield();
 const galaxy = createGalaxy();
@@ -86,6 +87,8 @@ createSongPicker(app, {
       if (currentAnalysisId !== analysisId) return;
       if (!result.audio) throw new Error('The analyser did not return audio features');
       if (!result.world) throw new Error(result.worldError || 'Gemini did not return a world blueprint');
+      // The planet's colours come from the song's spectrum, stored with the features so every view draws the same planet
+      result.audio = withSpectrumPalette(result.audio);
 
       selectedJourney = {
         blob: song.blob,

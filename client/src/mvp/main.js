@@ -15,7 +15,8 @@ import { getPlanetJourney } from '../experience/planetJourney.js';
 import { getPlanet } from '../api/planets.js';
 import { createFpsMeter, createDebugOverlay } from './debugOverlay.js';
 import { analyseSong } from './tempAnalysis.js';
-import { DEMO_SONGS, makeBlueprint } from './demoBlueprints.js';
+import { DEMO_SONGS, makeBlueprint, demoPaletteAdjust } from './demoBlueprints.js';
+import { withSpectrumPalette } from '../world/spectrumPalette.js';
 import { validatePlanetData } from './planetData.js';
 
 // ---------- Settings ----------
@@ -287,7 +288,9 @@ async function loadSong(next, journey = null) {
     } else if (!analysed.has(next.id)) {
       const response = await fetch(next.url);
       if (!response.ok) throw new Error(`${next.url}: ${response.status}`);
-      analysed.set(next.id, await analyseSong(await response.arrayBuffer(), audioContext));
+      const result = await analyseSong(await response.arrayBuffer(), audioContext);
+      // Demo planets use the same spectrum palette as every other song, with a small artistic adjustment
+      analysed.set(next.id, { ...result, features: withSpectrumPalette(result.features, demoPaletteAdjust(next.id)) });
     }
     if (id !== loadId) return; // another song was picked meanwhile
     const { features, audioBuffer, blueprint: savedBlueprint } = analysed.get(next.id);
