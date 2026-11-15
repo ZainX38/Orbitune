@@ -20,12 +20,6 @@ NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 SectionType = Literal["intro", "verse", "chorus", "drop", "bridge", "outro"]
 
-class Palette(BaseModel):
-    ground: str
-    peaks: str
-    sky: str
-    fog: str
-
 class Section(BaseModel):
     type: SectionType
     start: float
@@ -41,7 +35,6 @@ class World(BaseModel):
     planetName: str
     mood: str
     biome: str
-    palette: Palette
     flora: list[str]
     sections: list[Section]
     landmarks: list[Landmark]
@@ -88,6 +81,56 @@ def analyse_audio(path):
 
 N_FRAMES = 512
 
+# The song spectrum descriptor. These numbers MIRROR client/src/world/spectrumPalette.js
+# (describeSpectrum) exactly, so a song analysed here and in the browser gives the same palette.
+# The palette itself is computed from this in the client (one implementation), not here.
+BAND_EDGES = {"bass": (30, 250), "mid": (250, 2000), "treble": (2000, 10000)}
+CHROMA_RANGE = (400, 5000)  # below ~400 Hz a semitone spans < 2 FFT bins: sample-rate dependent
+NOTE_WIDTH = 0.08  # bins between two notes (mostly leakage) count less
+CURVE_BANDS = 24
+
+
+def describe_spectrum(mean_power, hz_per_bin, loudness_frames):
+    """chroma (12, strongest = 1), bass/mid/treble amplitude shares, a 24-band log spectrum, energy."""
+    hz = np.arange(len(mean_power)) * hz_per_bin
+    valid = (hz > 0) & (mean_power > 0)
+
+    chroma = np.zeros(12)
+    in_chroma = valid & (hz >= CHROMA_RANGE[0]) & (hz < CHROMA_RANGE[1])
+    semitones = 12 * np.log2(hz[in_chroma] / 440)
+    nearest = np.round(semitones)
+    pcs = (nearest.astype(int) + 9) % 12
+    weight = np.exp(-((semitones - nearest) ** 2) / NOTE_WIDTH)
+    np.add.at(chroma, pcs, np.sqrt(mean_power[in_chroma]) * weight)
+    chroma = chroma / (chroma.max() or 1)
+
+    amp = {
+        band: float(np.sqrt(mean_power[valid & (hz >= lo) & (hz < hi)].sum()))
+        for band, (lo, hi) in BAND_EDGES.items()
+    }
+    total = sum(amp.values()) or 1
+
+    curve = np.zeros(CURVE_BANDS)
+    with np.errstate(divide="ignore"):
+        k = np.floor(CURVE_BANDS * np.log(hz / 40) / np.log(10000 / 40))
+    in_curve = valid & (k >= 0) & (k < CURVE_BANDS)
+    np.add.at(curve, k[in_curve].astype(int), mean_power[in_curve])
+    curve = np.sqrt(curve)
+    curve = curve / (curve.max() or 1)
+
+    # loudness against its 99th percentile, like normalise() in client/src/mvp/tempAnalysis.js
+    top = float(np.sort(loudness_frames)[int(len(loudness_frames) * 0.99)]) or 1
+    energy = float(np.minimum(1, loudness_frames / top).mean())
+
+    r3 = lambda v: round(float(v), 3)
+    return {
+        "chroma": [r3(v) for v in chroma],
+        "bands": {band: r3(v / total) for band, v in amp.items()},
+        "curve": [r3(v) for v in curve],
+        "energy": r3(energy),
+    }
+
+
 
 def squash(values, n=N_FRAMES):
     """Resample any array to exactly n points, rounded to 2 decimals."""
@@ -116,7 +159,8 @@ def get_audio_data(path):
     loudness = rms / rms.max()
 
     # the 3 strongest frequencies in the whole song
-    spectrum = np.abs(librosa.stft(y)).mean(axis=1)
+    stft = np.abs(librosa.stft(y))
+    spectrum = stft.mean(axis=1)
     fft_freqs = librosa.fft_frequencies(sr=sr)
     idx, _ = find_peaks(spectrum, distance=10)
     idx = [i for i in idx if fft_freqs[i] >= 40]
@@ -127,7 +171,8 @@ def get_audio_data(path):
         for i in top
     ]
 
-    # atmosphere colour: note -> hue, loudness -> saturation, treble -> brightness
+    # legacy single atmosphere colour (older readers): note -> hue, loudness -> saturation, treble -> brightness.
+    # The planet's real colours come from "spectrum" below, via client/src/world/spectrumPalette.js.
     chroma = librosa.feature.chroma_stft(y=y, sr=sr).mean(axis=1)
     hue = int(chroma.argmax()) / 12
     sat = 0.35 + 0.45 * float(loudness.mean())
@@ -146,6 +191,10 @@ def get_audio_data(path):
         "beats": [round(float(t), 2) for t in beats],
         "peaks": peaks,
         "atmosphere": atmosphere,
+        # loudness frames from the same Hann-windowed STFT (93 ms windows), like the browser analyser
+        "spectrum": describe_spectrum(
+            (stft ** 2).mean(axis=1), float(fft_freqs[1]), np.sqrt((stft[1:] ** 2).sum(axis=0))
+        ),
     }
 ############################## Gemini API
 
@@ -164,8 +213,6 @@ Rules:
 - landmarks: one per chorus or drop. "section" must match that section's type.
   "kind" is a terrain feature (mountain range, canyon, crater...).
   "lore" is two short, atmospheric sentences.
-- palette: four hex colours like "#2b2f45" that fit the mood. Darker and warmer
-  for low brightness, lighter and cooler for high brightness.
 - flora: 2 to 3 invented plants. ambiencePrompts: 2 to 3 short sound descriptions.
 - narratorStyle: one line describing a storyteller's voice.
 Make everything consistent with the music."""

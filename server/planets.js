@@ -38,10 +38,15 @@ function summary(doc) {
     name: b.planetName ?? 'Unnamed planet',
     song: doc.song ?? {},
     description: [b.mood, b.biome].filter(Boolean).join(' · '),
-    palette: b.palette ?? null,
+    // The song spectrum palette (stored with the features) first; Gemini's palette only for older planets
+    palette: doc.features?.spectrumPalette ?? b.palette ?? null,
     createdAt: doc.createdAt,
   };
 }
+
+const SUMMARY_PROJECTION = Object.fromEntries(
+  ['bass', 'mid', 'treble', 'loudness', 'beats', 'peaks', 'spectrum'].map((key) => [`features.${key}`, 0]),
+);
 
 export const planetsRouter = express.Router();
 planetsRouter.use(express.json({ limit: '20mb' })); // features hold per-frame arrays
@@ -69,7 +74,8 @@ planetsRouter.get('/', async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || (full ? 8 : 50), 1), full ? 20 : 200);
   try {
     const docs = await (await planets())
-      .find({}, full ? {} : { projection: { features: 0 } })
+      // Summaries skip the big per-frame arrays but keep features.spectrumPalette
+      .find({}, full ? {} : { projection: SUMMARY_PROJECTION })
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
       .toArray();
