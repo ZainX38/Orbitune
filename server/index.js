@@ -5,8 +5,11 @@ import { search, getAudio } from './deezer.js';
 import multer from 'multer';
 import path from 'node:path';
 import { analyseAudio } from './analyse.js';
+import { planetsRouter } from './planets.js';
 
 const app = express();
+
+app.use('/planets', planetsRouter);
 
 // GET /search?q=daft punk  →  a list of matching songs.
 app.get('/search', async (req, res) => {
