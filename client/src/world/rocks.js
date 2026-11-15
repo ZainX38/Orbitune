@@ -8,9 +8,9 @@ import { blob, part } from './shapes.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const VARIANTS = [
-  { detail: 2, lumps: 0.3, sy: 0.72 },   // big rounded boulder
-  { detail: 1, lumps: 0.36, sy: 0.6 },   // angular stone
-  { detail: 1, lumps: 0.24, sy: 0.42 },  // flat slab
+  { detail: 2, lumps: 0.2, sy: 0.74 },   // big rounded boulder
+  { detail: 2, lumps: 0.27, sy: 0.6 },   // rougher stone
+  { detail: 1, lumps: 0.16, sy: 0.42 },  // flat slab (small ones only need few triangles)
 ];
 
 export function createRocks(terrain, pal, reactive, total = 420) {
@@ -25,8 +25,8 @@ export function createRocks(terrain, pal, reactive, total = 420) {
   VARIANTS.forEach((variant, index) => {
     const count = Math.round(total / VARIANTS.length);
     const rng = makeRng(terrain.seed + 4000 + index * 733);
-    // shade 0.5: the lower half is much darker, like the damp, shadowed foot of a real boulder
-    const geometry = part(blob(1, variant.detail, variant.lumps, 20 + index), colour, 0, { sy: variant.sy, shade: 0.5 });
+    // shade: the foot is darker than the top, like the damp, shadowed foot of a real boulder
+    const geometry = part(blob(1, variant.detail, variant.lumps, 20 + index), colour, 0, { sy: variant.sy, shade: 0.36 });
     const mesh = new THREE.InstancedMesh(geometry, material, count);
     let placed = 0, tries = 0;
 
