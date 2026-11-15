@@ -74,7 +74,7 @@ export function validatePlanetData(data) {
     && isFiniteNumber(section.start)
     && isFiniteNumber(section.end)
     && section.start >= 0
-    && section.end > section.start
+    && section.end >= section.start
     && section.end <= duration
   ))) {
     throw new Error('World JSON has invalid sections');
@@ -89,5 +89,9 @@ export function validatePlanetData(data) {
     throw new Error('World JSON has invalid landmarks');
   }
 
-  return { audio, world };
+  const nonEmptySections = sections.filter((section) => section.end > section.start);
+  return {
+    audio,
+    world: nonEmptySections.length === sections.length ? world : { ...world, sections: nonEmptySections },
+  };
 }

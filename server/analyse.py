@@ -28,8 +28,8 @@ class Palette(BaseModel):
 
 class Section(BaseModel):
     type: SectionType
-    start: int
-    end: int
+    start: float
+    end: float
 
 class Landmark(BaseModel):
     name: str
@@ -54,15 +54,19 @@ class World(BaseModel):
 def find_sections(y, sr, n_sections=6):
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     bounds = librosa.segment.agglomerative(chroma, n_sections)
-    times = list(librosa.frames_to_time(bounds, sr=sr)) + [librosa.get_duration(y=y, sr=sr)]
+    duration = float(librosa.get_duration(y=y, sr=sr))
+    times = [float(t) for t in librosa.frames_to_time(bounds, sr=sr)] + [duration]
     rms = librosa.feature.rms(y=y)[0]
 
     sections = []
     for i in range(len(times) - 1):
+        start, end = times[i], times[i + 1]
+        if end <= start:
+            continue
         a, b = librosa.time_to_frames([times[i], times[i + 1]], sr=sr)
         sections.append({
-            "start": round(float(times[i])),
-            "end": round(float(times[i + 1])),
+            "start": start,
+            "end": end,
             "energy": round(float(rms[a:b].mean()), 4),
         })
     return sections
@@ -132,7 +136,7 @@ def get_audio_data(path):
     atmosphere = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
 
     return {
-        "duration": round(float(librosa.get_duration(y=y, sr=sr)), 1),
+        "duration": float(librosa.get_duration(y=y, sr=sr)),
         "bpm": round(float(np.atleast_1d(tempo)[0])),
         "frames": N_FRAMES,
         "bass": squash(bass),
