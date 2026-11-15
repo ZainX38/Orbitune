@@ -8,6 +8,7 @@ export default {
     rollupOptions: {
       input: {
         index: resolve(root, 'index.html'),
+        home: resolve(root, 'home.html'),
         mvp: resolve(root, 'mvp.html'),
       },
     },
