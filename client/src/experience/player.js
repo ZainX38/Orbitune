@@ -29,8 +29,8 @@ const DEFAULTS = {
   walkSpeed: 5 * PLAYER_SCALE,   // 1.75 units per second: once around the equator in about 3 minutes
   runSpeed: 11 * PLAYER_SCALE,   // 3.85 with Shift: about 80 s around the equator.
                                  // A 30 s song moves along the equator at 2*PI*50/30 = 10.5 units per second, so the
-                                 // music is now faster than a run: walking east it repeats bars while you catch up
-                                 // (songPosition.js). At PLAYER_SCALE 1 a run kept up with it.
+                                 // music is faster than a run: the playhead overtakes you once per lap, and the music
+                                 // only comes back to you when you have walked well away (songPosition.js).
   smoothing: 8,        // higher = snappier start/stop
   sensitivity: 0.0022, // radians per pixel of mouse movement
   maxPitch: THREE.MathUtils.degToRad(85),

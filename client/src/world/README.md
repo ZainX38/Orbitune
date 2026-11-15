@@ -12,6 +12,8 @@ import { createPlanet } from './world/planet.js';
 const planet = createPlanet(features, blueprint);
 scene.add(planet.group);                 // brings its own sun and sky light: add NO lights for it
 renderer.toneMapping = THREE.ACESFilmicToneMapping; // the colours are tuned for this
+renderer.shadowMap.enabled = true;                  // the sun casts soft shadows (switch: SHADOWS in planet.js)
+renderer.shadowMap.type = THREE.PCFShadowMap;
 
 // every frame
 planet.update(dt, songTime, listenerDirection);
@@ -28,9 +30,9 @@ Test page: `npm run dev`, then `http://localhost:5173/world-test.html` (fake dat
 | Field | Status | What it is |
 | --- | --- | --- |
 | `group` | same | `THREE.Group` with everything. Now also contains the sun (a `DirectionalLight`). |
-| `getHeight(direction)` | same call (Contract 3), **more exact** | Height above `radius` for a normalised direction in the planet's own space. It now returns the height of the **drawn mesh** (the flat triangles), not the height function the mesh was sampled from: between vertices those two differed by up to 0.8 units, so trees floated and a low camera could end up under the ground. Never changes after the build. About 0.6 µs per call. |
+| `getHeight(direction)` | same call (Contract 3), **more exact** | Height above `radius` for a normalised direction in the planet's own space. It returns the height of the **drawn mesh** (the flat triangles), not the height function the mesh was sampled from: between vertices those two differ, so trees floated and a low camera could end up under the ground. The ground is now smooth-SHADED, but that only changes its lighting: the triangles are where they were, and this is still exact. Never changes after the build. About 0.6 µs per call. |
 | `radius` | same | 50 |
-| `landmarks` | **extended** | `[{ name, lore, kind, section, position, marker, time, beam }]`. New: `time` (seconds in the song where the landmark sits) and `beam` (the light beam mesh). |
+| `landmarks` | **extended** | `[{ name, lore, kind, section, position, marker, time, beam, core }]`. `time`: seconds in the song where the landmark sits. `beam`: the light beam mesh. `marker`: the crystal cluster, now standing on the ground at `position` (it no longer floats or spins). New: `core`, the glowing heart inside it. |
 | `colours` | **changed behaviour** | `{ space, sky, fog, atmosphere }` as before, but `sky` and `fog` are now **live**: `update()` re-tints these same `THREE.Color` objects every frame. See "Sky and fog" below. |
 | `onBeat(strength = 1)` | same call, more effect | Pulse on atmosphere + landmarks (as before), plus a ripple of light that starts under the listener and glowing flora. |
 | `update(dt, songTime, listenerDirection)` | **CHANGED: 2 new parameters** | See below. `update(dt)` alone still works (the planet idles). |
@@ -86,27 +88,32 @@ plants (sway). `getHeight` and the ground mesh are fixed from the moment the pla
 | bpm + brightness of the whole song | the planet's **character**: fast, bright songs are jagged with broken coasts, slow warm songs have broad rolling land. Also how much sea there is. | `terrain.js` (`character`) |
 | Blueprint `sections` | chorus = mountain range, drop = canyon, on the equator at that song time (as before) | `terrain.js`, `landmarks.js` |
 | Blueprint `palette` (4 colours) | every colour in the world: sand, lowland patches, rock on steep slopes, peaks, water, clouds, sun and sky light. A dark `sky` colour makes a night planet (dimmer light, stronger glows). | `biome.js` |
-| Blueprint `flora` (free text) | 2 to 3 of these shapes, chosen by keywords: pine, blossom, palm, crystal, mushroom, reed. Unknown names fall back to pine + blossom. | `flora.js` |
+| Blueprint `flora` (free text) | 2 to 3 of these shapes, chosen by keywords: pine, blossom, palm, crystal, mushroom, reed. Unknown names fall back to pine + blossom. Every plant has its own size, turn, lean and colour tint. | `flora.js` |
+| the terrain itself | boulders and stones, more of them on slopes and high ground | `rocks.js` |
 | `features.atmosphere` | rim glow colour (blended with the palette) and a light tint on sky and fog | `biome.js`, `planet.js` |
 | live: beats | light ripples from the listener, atmosphere + landmark pulse, glowing flora flash | `reactive.js` |
 | live: loudness / mids / treble at `songTime` | overall glow and saturation / flora sway / sky and glow tint | `reactive.js`, `planet.js` |
 
 ## Files
 
-- `planet.js`: entry point. Builds the ground mesh (colour by height + slope), puts everything together, `update`.
+- `planet.js`: entry point. Builds the ground mesh (smooth-shaded, colour per vertex from height + slope), puts everything together, sun and shadows, `update`.
 - `terrain.js`: the height function the mesh is built from, sea level, song character, longitude <-> time helpers.
+- `sphere.js`: the icosphere the ground is made of, with vertices shared between neighbouring triangles.
 - `surface.js`: `getHeight` (Contract 3): the exact height of the built mesh in any direction.
+- `shapes.js`: building blocks for objects: rounded blobs, lathe shapes, crystal shards, colour baked per vertex.
 - `biome.js`: all colours, derived from the Blueprint palette.
 - `reactive.js`: the shared shader uniforms and shader patches: water waves, hemisphere light, beat ripples, sway.
 - `atmosphere.js`: rim glow seen from orbit + the sky dome seen from the surface.
-- `clouds.js`: drifting low-poly clouds.
+- `clouds.js`: drifting clouds, soft clusters of rounded puffs.
 - `flora.js`: the plant shapes and where they grow.
-- `landmarks.js`: landmark crystals and beams, returns the landmark list.
+- `rocks.js`: boulders and stones.
+- `landmarks.js`: landmark crystal clusters (glassy shell + glowing core) and beams, returns the landmark list.
 - `noise.js`: value noise, fbm, seeded random.
 - `dev.js`: test page with fake data (`world-test.html`).
 
 ## Tuning knobs
 
-- Too slow: lower `DETAIL` in `planet.js` (50 = about 52k triangles, 40 = about 34k), `total` in `createFlora`, `clusters` in `createClouds`.
+- Too slow: first set `SHADOWS = false` in `planet.js` (shadows draw the world a second time). Then lower `DETAIL` in `planet.js` (64 = about 85k triangles, 50 = about 52k, 40 = about 34k), `total` in `createFlora` and `createRocks`, `clusters` in `createClouds`.
+- Terrain too soft or too rough: the treble `detail` layer, the ridge rounding and `BUMP_WIDTH` in `terrain.js`. Change the shape only there: the mesh and `getHeight` both come from it.
 - Sun should not follow the listener: set `SUN_FOLLOWS_LISTENER = false` in `planet.js`.
 - Ripple speed, life, width and fade-in: top of `reactive.js`.

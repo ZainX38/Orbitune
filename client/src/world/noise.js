@@ -8,7 +8,8 @@ function hash(x, y, z, seed) {
   return (h >>> 0) / 4294967295; // 0..1
 }
 
-const fade = (t) => t * t * (3 - 2 * t);
+// Quintic fade: slope AND curvature are zero at the grid points, so the noise has no creases along its grid
+const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 const lerp = (a, b, t) => a + (b - a) * t;
 
 // Returns -1..1
