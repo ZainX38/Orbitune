@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPlanet } from './planet.js';
+import { DEFAULT_QUALITY, nextQuality, applyRendererQuality } from './quality.js';
 
 // ---------- Mock data (swap for real mocks/*.json, then real data) ----------
 function fakeFeatures(frames = 512) {
@@ -35,10 +36,9 @@ const mockBlueprint = {
 // ---------- Scene ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping; // the planet's colours are tuned for this
-renderer.shadowMap.enabled = true;                  // the planet's sun casts soft shadows
-renderer.shadowMap.type = THREE.PCFShadowMap;
+let quality = DEFAULT_QUALITY;
+applyRendererQuality(renderer, quality);            // pixel ratio + the sun's soft shadows, from the quality level
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -50,15 +50,21 @@ controls.enableDamping = true;
 // No lights needed: the planet brings its own sun and sky light.
 
 const features = fakeFeatures();
-const planet = createPlanet(features, mockBlueprint);
+const planet = createPlanet(features, mockBlueprint, { quality });
 scene.background = planet.colours.space;
 scene.add(planet.group);
 
 // Fake beats so you can see the pulse
 setInterval(() => planet.onBeat(1), 625);
 
-// Press H to sanity-check getHeight: logs heights at the landmarks
+// Press H to sanity-check getHeight: logs heights at the landmarks. Press Q to change the quality level.
 addEventListener('keydown', (e) => {
+  if (e.code === 'KeyQ' && !e.repeat) {
+    quality = nextQuality(quality);
+    applyRendererQuality(renderer, quality);
+    planet.setQuality(quality);
+    console.log('[dev] quality:', quality, '| drawn ground vs getHeight:', planet.groundError());
+  }
   if (e.key === 'h') for (const l of planet.landmarks) console.log(l.name, planet.getHeight(l.position.clone().normalize()).toFixed(2));
 });
 

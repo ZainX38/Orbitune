@@ -14,6 +14,7 @@ export function createFpsMeter() {
   let fps = 0, worst = 0;
 
   function tick(now) {
+    if (stamps.length && now - stamps[stamps.length - 1] > WINDOW / 2) reset(); // a pause (hidden tab, a long build): start again
     stamps.push(now);
     while (stamps.length > 2 && now - stamps[0] > WINDOW) stamps.shift();
     const span = now - stamps[0];
@@ -23,7 +24,7 @@ export function createFpsMeter() {
   }
 
   // Forget everything (after a pause, a song load or a quality change: those frames say nothing about the speed)
-  const reset = () => { stamps.length = 0; fps = 0; worst = 0; };
+  function reset() { stamps.length = 0; fps = 0; worst = 0; }
 
   return {
     tick, reset,

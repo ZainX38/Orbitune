@@ -49,7 +49,7 @@ export function createClouds(radius, seed, colour, reactive, { clusters = 34 } =
       mesh.setMatrixAt(count++, m);
     }
   }
-  mesh.count = count;
+  mesh.count = mesh.userData.placed = count; // userData.placed: the full number (QUALITY draws a share of it)
   mesh.instanceMatrix.needsUpdate = true;
   mesh.frustumCulled = false; // instances are all around the planet
 

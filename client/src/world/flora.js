@@ -164,7 +164,7 @@ export function createFlora(terrain, blueprint, pal, colours, reactive, total = 
       mesh.setColorAt(placed, tint.setRGB(light * (1 + warm), light, light * (1 - warm)));
       placed++;
     }
-    mesh.count = placed;
+    mesh.count = mesh.userData.placed = placed; // userData.placed: the full number (QUALITY draws a share of it)
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.frustumCulled = false; // instances are all around the planet

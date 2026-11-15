@@ -3,10 +3,12 @@
 // No server needed: the two demo songs are in public/demo/, analysed in the browser (tempAnalysis.js).
 // Run `npm run dev` and open http://localhost:5173/mvp.html
 // Add ?nolock to the URL to test without capturing the mouse (drag to look, click the ground to walk).
+// Keys: F3 = debug overlay, Q = quality low / medium / high (also ?quality=low in the URL).
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPlanet } from '../world/planet.js';
+import { QUALITY, QUALITY_LEVELS, DEFAULT_QUALITY, nextQuality, applyRendererQuality, createAutoQuality } from '../world/quality.js';
 import { createPlayer, PLAYER_SCALE } from '../experience/player.js';
 import { createSongPosition, activeSources } from '../experience/songPosition.js';
 import { createFpsMeter, createDebugOverlay } from './debugOverlay.js';
@@ -40,11 +42,12 @@ const HINTS = {
 // ---------- Renderer, scene, camera ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping; // believable light: bright areas roll off instead of clipping
 renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = true; // the planet's sun casts soft shadows (switch: SHADOWS in world/planet.js)
-renderer.shadowMap.type = THREE.PCFShadowMap;
+// Pixel ratio and shadow maps: from the quality level (world/quality.js). It can change while running, see setQuality below.
+const params = new URLSearchParams(location.search);
+let quality = QUALITY_LEVELS.includes(params.get('quality')) ? params.get('quality') : DEFAULT_QUALITY;
+applyRendererQuality(renderer, quality);
 document.body.prepend(renderer.domElement);
 
 const SPACE = new THREE.Color('#05060d');
@@ -77,7 +80,7 @@ const stars = (() => {
 
 // ---------- State ----------
 const audioContext = new AudioContext(); // stays suspended until the first click or key press
-const useLock = !new URLSearchParams(location.search).has('nolock');
+const useLock = !params.has('nolock');
 const analysed = new Map(); // song id -> { features, audioBuffer } (so switching back is instant)
 
 let mode = 'loading'; // 'loading' | 'orbit' | 'landing' | 'surface' | 'takeoff'
@@ -250,7 +253,7 @@ async function loadSong(index) {
     const blueprint = makeBlueprint(next.id, features);
 
     song = next;
-    planet = createPlanet(features, blueprint);
+    planet = createPlanet(features, blueprint, { quality });
     scene.add(planet.group);
     marker = createMarker();
     planet.group.add(marker);
@@ -272,6 +275,7 @@ async function loadSong(index) {
     facing = Math.atan2(camera.position.z, camera.position.x);
     planet.group.rotation.y = -facing;
     setMode('orbit');
+    fpsMeter.reset(); autoQuality.hold(); // the build and the new shaders say nothing about the frame rate
   } catch (error) {
     console.error('[mvp] could not load the song', error);
     ui.hint.textContent = hintText = `Could not load "${next.title}" (see the console)`;
@@ -424,6 +428,7 @@ function overlayLines() {
     `fps        ${num(fpsMeter.fps, 0)}   (worst frame ${num(fpsMeter.worst, 0)} ms)`,
     `triangles  ${info.triangles.toLocaleString('en')}   draw calls ${info.calls}`,
     `mode       ${mode}`,
+    `quality    ${quality}   pixel ratio ${num(renderer.getPixelRatio(), 2)}   auto ${autoQuality.enabled ? 'on' : `off (${autoQuality.note})`}`,
   ];
   if (!planet || !music) return lines;
   const at = planet.timeAt(listener);
@@ -437,6 +442,24 @@ function overlayLines() {
   );
   return lines;
 }
+
+// ---------- Quality: Q cycles low / medium / high. It also drops by itself when the frame rate stays low ----------
+function setQuality(name) {
+  if (!QUALITY[name] || name === quality) return;
+  console.log(`[mvp] quality: ${quality} -> ${name}`);
+  quality = name;
+  applyRendererQuality(renderer, quality); // pixel ratio, shadow maps
+  planet?.setQuality(quality);             // ground detail, shadows, how many plants, rocks and clouds
+  fpsMeter.reset();
+  autoQuality.hold();
+}
+const autoQuality = createAutoQuality({ get: () => quality, set: setQuality, log: (text) => console.log(`[mvp] ${text}`) });
+
+addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyQ' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  autoQuality.off('you chose with Q'); // a level picked by hand stays
+  setQuality(nextQuality(quality));
+});
 
 // ---------- Frame loop ----------
 // In orbit the planet turns so that the longitude that is playing faces the camera's side (`facing`)
@@ -452,6 +475,7 @@ renderer.setAnimationLoop((now) => {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   fpsMeter.tick(now);
+  autoQuality.update(dt, fpsMeter.fps, !!planet && mode !== 'loading' && !document.hidden && fpsMeter.full);
   beatPulse *= Math.exp(-dt * 6);
 
   if (planet && mode !== 'loading') {
@@ -487,7 +511,8 @@ loadSong(0);
 
 // Handy in the browser console while testing
 window.mvp = {
-  camera, scene, renderer, land, takeOff, loadSong, overlay, fpsMeter, activeSources,
+  camera, scene, renderer, land, takeOff, loadSong, overlay, fpsMeter, activeSources, setQuality, autoQuality,
+  get quality() { return quality; },
   get planet() { return planet; }, get player() { return player; }, get music() { return music; },
   get mode() { return mode; }, get songTime() { return songTime; },
 };
