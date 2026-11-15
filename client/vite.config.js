@@ -8,6 +8,7 @@ export default {
     rollupOptions: {
       input: {
         index: resolve(root, 'index.html'),
+        home: resolve(root, 'home.html'),
         mvp: resolve(root, 'mvp.html'),
       },
     },
@@ -25,6 +26,7 @@ export default {
       '/search': 'http://localhost:3000',
       '/audio': 'http://localhost:3000',
       '/analyse': 'http://localhost:3000',
+      '/narrate': 'http://localhost:3000',
       '/planets': 'http://localhost:3000',
     },
   },

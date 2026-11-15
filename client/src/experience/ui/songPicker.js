@@ -22,8 +22,8 @@ export function createSongPicker(container, { onSongChosen }) {
   const input = container.querySelector('.song-picker__input');
   const status = container.querySelector('.song-picker__status');
   const results = container.querySelector('.song-picker__results');
-  const uploadButton = container.querySelector('.song-picker__upload'); 
-  const fileInput = container.querySelector('.song-picker__file');      
+  const uploadButton = container.querySelector('.song-picker__upload');
+    const fileInput = container.querySelector('.song-picker__file');
 
   // Clears the results list and draws one row per song.
   // Song titles come from Deezer, so we set them with textContent, never

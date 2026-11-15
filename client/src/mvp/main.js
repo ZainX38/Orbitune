@@ -23,6 +23,12 @@ const LAND_TIME = 1.5;      // seconds, orbit -> surface
 const TAKEOFF_TIME = 1.2;   // seconds, surface -> orbit
 const ORBIT_DISTANCE = 150; // camera distance from the planet centre
 const LANDMARK_RANGE = 12 * PLAYER_SCALE; // come this close to a landmark to trigger it (scales with the player, see player.js)
+const APPROACH_RADIUS = LANDMARK_RANGE * 3;
+const NARRATION_COOLDOWN = 1.5;
+const DUCK_LEVEL = 0.2;
+const DUCK_IN_SECONDS = 0.6;
+const DUCK_OUT_SECONDS = 1.2;
+const WALK_AWAY_FADE_SECONDS = 0.5;
 // Surface fog. From eyes 0.6 above a planet of radius 50 the bare horizon is only ~8 units away and the furthest
 // mountain tops and clouds you can see at all are ~55 away, so the fog has to work inside that range: it starts
 // just before the horizon and is almost solid where the furthest things appear. That haze is what makes hills
@@ -89,6 +95,7 @@ const analysed = new Map(); // song id -> { features, audioBuffer } (so switchin
 let mode = 'loading'; // 'loading' | 'orbit' | 'landing' | 'surface' | 'takeoff'
 let move = null;      // the camera move running during 'landing' / 'takeoff'
 let song = null, planet = null, player = null, music = null, marker = null;
+let narratorStyle = '';
 let songTime = 0;
 let facing = Math.atan2(camera.position.z, camera.position.x); // world direction the playing longitude turns towards
 let look = 0;         // 0 = orbit look (space), 1 = surface look (sky + fog)
@@ -119,6 +126,12 @@ const ui = {
   progress: document.querySelector('#progress > div'),
   hint: document.getElementById('hint'),
   back: document.getElementById('back'),
+  landmarkLabel: document.getElementById('landmark-label'),
+  captions: document.getElementById('captions'),
+  toast: document.getElementById('narration-toast'),
+  narrationEnabled: document.getElementById('narration-enabled'),
+  musicVolume: document.getElementById('music-volume'),
+  musicMute: document.getElementById('music-mute'),
   buttons: DEMO_SONGS.map((s, i) => {
     const button = document.createElement('button');
     button.textContent = s.title;
@@ -251,6 +264,7 @@ function teardown() {
 async function loadSong(next, journey = null) {
   if (song?.id === next.id) return;
   loadError = null;
+  stopNarration({ immediate: true, abortPrefetch: true });
   const id = ++loadId;
   ui.buttons.forEach((button) => {
     button.setAttribute('aria-pressed', button.dataset.songId === next.id);
@@ -278,9 +292,11 @@ async function loadSong(next, journey = null) {
     if (id !== loadId) return; // another song was picked meanwhile
     const { features, audioBuffer, blueprint: savedBlueprint } = analysed.get(next.id);
     const blueprint = savedBlueprint ?? makeBlueprint(next.id, features);
+    narratorStyle = blueprint.narratorStyle ?? '';
 
     song = next;
     planet = createPlanet(features, blueprint, { quality });
+    resetLandmarkStates();
     scene.add(planet.group);
     marker = createMarker();
     planet.group.add(marker);
@@ -291,6 +307,7 @@ async function loadSong(next, journey = null) {
       onUnlock: () => { if (mode === 'surface') takeOff(); }, // leaving pointer lock (Esc) = take off
     });
     music = createSongPosition({ audioContext, audioBuffer, features, planet, onBeat });
+    music.setVolume(Number(ui.musicVolume.value));
     if (audioContext.state === 'running') music.start();
 
     ui.planet.textContent = planet.name;
@@ -380,7 +397,9 @@ async function startExperience() {
 
 // Browsers only allow sound after a click or key press
 function unlockAudio() {
-  if (audioContext.state !== 'running') audioContext.resume().then(() => music?.start());
+  if (audioContext.state !== 'running') audioContext.resume().then(() => music?.start()).catch((error) => {
+    console.warn('Could not resume audio:', error);
+  });
   else music?.start();
 }
 addEventListener('pointerdown', unlockAudio);
@@ -408,7 +427,7 @@ function land(localDirection) {
     done() {
       setMode('surface');
       player.enable(); // keeps the spot set by place()
-      nearby.clear();
+      stopNarration();
       heightTimer = 0;
     },
   };
@@ -416,6 +435,7 @@ function land(localDirection) {
 
 function takeOff() {
   if (mode !== 'surface') return;
+  stopNarration({ abortPrefetch: true });
   setMode('takeoff');
   player.disable();
   music.setFree(true);
@@ -483,19 +503,302 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-// ---------- Landmarks: log once when the player comes near (Role 4: replace the log with narration) ----------
-const nearby = new Set();
-function checkLandmarks() {
-  planet.landmarks.forEach((landmark, i) => {
-    const distance = player.position.distanceTo(landmark.position); // both in the planet's own space
-    if (distance < LANDMARK_RANGE && !nearby.has(i)) {
-      nearby.add(i);
-      console.log(`[landmark] ${landmark.name} (${landmark.kind}): ${landmark.lore}`);
-    } else if (distance > LANDMARK_RANGE * 1.25 && nearby.has(i)) {
-      nearby.delete(i); // left: it can trigger again on the next visit
+// ---------- Landmark approach, narration, and audio ducking ----------
+const narrationCache = new Map();
+const landmarkStates = new Map();
+const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+let activeNarration = null;
+let pendingNarration = null;
+let narrationEnabled = ui.narrationEnabled.checked;
+let lastMusicVolume = Number(ui.musicVolume.value) || 0.9;
+let toastTimer;
+
+function resetLandmarkStates() {
+  landmarkStates.clear();
+  for (const landmark of planet?.landmarks ?? []) {
+    landmarkStates.set(landmark.id, {
+      phase: 'idle', controller: null, prefetch: null, prefetchError: null,
+      starting: false, failed: false, cooldownUntil: 0,
+    });
+  }
+  ui.landmarkLabel.style.opacity = '0';
+  ui.captions.hidden = true;
+  ui.captions.textContent = '';
+}
+
+function cacheSegment(value) {
+  return String(value ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
+}
+
+function loreHash(text) {
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+function setMusicDuck(value, duration) {
+  if (!music) return;
+  const gain = music.musicGain.gain;
+  const now = audioContext.currentTime;
+  gain.cancelScheduledValues(now);
+  gain.setValueAtTime(gain.value, now);
+  gain.linearRampToValueAtTime(value, now + duration);
+}
+
+function showNarrationToast() {
+  ui.toast.textContent = 'Narration unavailable';
+  ui.toast.dataset.visible = 'true';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { ui.toast.dataset.visible = 'false'; }, 2600);
+}
+
+function prefetchNarration(landmark, state) {
+  if (
+    !narrationEnabled || document.hidden || Number(ui.musicVolume.value) === 0
+    || !landmark.lore?.trim() || state.prefetch || state.failed
+  ) return;
+  const key = `${landmark.id}:${loreHash(landmark.lore)}`;
+  if (narrationCache.has(key)) {
+    state.prefetch = Promise.resolve(narrationCache.get(key));
+    return;
+  }
+
+  const controller = new AbortController();
+  state.controller = controller;
+  const songId = cacheSegment(song?.id);
+  const landmarkId = cacheSegment(landmark.id);
+  state.prefetch = (async () => {
+    let response = await fetch(`/cache/${songId}/narration_${landmarkId}.mp3`, { signal: controller.signal });
+    if (!response.ok || !response.headers.get('content-type')?.includes('audio')) {
+      response = await fetch('/narrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `${landmark.name}. ${landmark.lore}`, style: narratorStyle }),
+        signal: controller.signal,
+      });
     }
+    if (!response.ok) throw new Error(`Narration request returned ${response.status}`);
+
+    const blob = await response.blob();
+    const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
+    if (controller.signal.aborted) return null;
+    const entry = { blob, audioBuffer };
+    narrationCache.set(key, entry);
+    return entry;
+  })().catch((error) => {
+    if (!controller.signal.aborted) {
+      state.prefetchError = error;
+    }
+    return null;
+  }).finally(() => {
+    if (state.controller === controller) state.controller = null;
   });
 }
+
+function finishNarration(current, { fadeSeconds = 0, natural = false, restoreImmediately = false } = {}) {
+  if (!current || activeNarration !== current) return;
+  activeNarration = null;
+  const now = audioContext.currentTime;
+  const gain = current.gain.gain;
+  gain.cancelScheduledValues(now);
+  gain.setValueAtTime(gain.value, now);
+  if (!natural) {
+    gain.linearRampToValueAtTime(0, now + fadeSeconds);
+    current.source.onended = null;
+    current.source.stop(now + fadeSeconds + 0.03);
+  }
+  const state = landmarkStates.get(current.landmark.id);
+  if (state) {
+    state.phase = 'visited';
+    state.cooldownUntil = performance.now() + NARRATION_COOLDOWN * 1000;
+  }
+  ui.captions.hidden = true;
+  ui.captions.textContent = '';
+  setMusicDuck(1, restoreImmediately ? 0 : DUCK_OUT_SECONDS);
+  if (fadeSeconds) {
+    setTimeout(() => {
+      current.source.disconnect();
+      current.gain.disconnect();
+    }, fadeSeconds * 1000 + 80);
+  } else {
+    current.source.disconnect();
+    current.gain.disconnect();
+  }
+}
+
+function stopNarration({ immediate = false, abortPrefetch = false } = {}) {
+  finishNarration(activeNarration, { restoreImmediately: immediate });
+  if (abortPrefetch) {
+    for (const state of landmarkStates.values()) {
+      state.controller?.abort();
+      state.controller = null;
+      state.prefetch = null;
+      state.prefetchError = null;
+      state.starting = false;
+      state.failed = false;
+      if (state.phase === 'approaching') state.phase = 'idle';
+    }
+    pendingNarration = null;
+  }
+}
+
+function startNarration(landmark, state) {
+  if (
+    !narrationEnabled || document.hidden || Number(ui.musicVolume.value) === 0 || activeNarration || pendingNarration
+    || state.starting || state.failed || !landmark.lore?.trim()
+  ) return;
+  prefetchNarration(landmark, state);
+  if (!state.prefetch) return;
+
+  const attempt = {};
+  state.starting = true;
+  pendingNarration = attempt;
+  let current = null;
+  void (async () => {
+    try {
+      const entry = await state.prefetch;
+      if (!entry) throw state.prefetchError ?? new Error('Narration audio was not available');
+      if (
+        state.phase !== 'approaching' || !narrationEnabled || document.hidden
+        || activeNarration || player.position.distanceTo(landmark.position) > LANDMARK_RANGE
+      ) return;
+
+      await audioContext.resume();
+      if (state.phase !== 'approaching' || !narrationEnabled || document.hidden || activeNarration) return;
+
+      const source = audioContext.createBufferSource();
+      source.buffer = entry.audioBuffer;
+      const gain = audioContext.createGain();
+      gain.gain.value = 1;
+      source.connect(gain).connect(audioContext.destination);
+      current = { landmark, source, gain };
+      activeNarration = current;
+      state.phase = 'narrating';
+      ui.captions.textContent = landmark.lore;
+      ui.captions.hidden = false;
+      source.onended = () => finishNarration(current, { natural: true });
+      setMusicDuck(DUCK_LEVEL, DUCK_IN_SECONDS);
+      source.start(audioContext.currentTime + 0.3);
+    } catch (error) {
+      if (state.phase === 'approaching' && state.prefetch && narrationEnabled && !document.hidden) {
+        state.failed = true;
+        console.warn(`Narration unavailable for landmark ${landmark.id}:`, error);
+        showNarrationToast();
+      }
+      finishNarration(current, { restoreImmediately: true });
+    } finally {
+      state.starting = false;
+      if (pendingNarration === attempt) pendingNarration = null;
+    }
+  })();
+}
+
+function updateLandmarkLabel(landmark, opacity) {
+  if (!landmark || opacity <= 0) {
+    ui.landmarkLabel.style.opacity = '0';
+    return;
+  }
+  ui.landmarkLabel.textContent = landmark.name;
+  ui.landmarkLabel.style.opacity = String(opacity);
+}
+
+function checkLandmarks() {
+  let labelLandmark = null;
+  let labelDistance = Infinity;
+  let labelOpacity = 0;
+  const now = performance.now();
+
+  for (const landmark of planet.landmarks) {
+    const state = landmarkStates.get(landmark.id);
+    const distance = player.position.distanceTo(landmark.position);
+    if (state.phase === 'idle' && distance <= APPROACH_RADIUS) {
+      state.phase = 'approaching';
+      state.failed = false;
+      state.prefetchError = null;
+      prefetchNarration(landmark, state);
+    }
+
+    if (state.phase === 'approaching') {
+      if (distance > APPROACH_RADIUS) {
+        state.controller?.abort();
+        state.controller = null;
+        state.prefetch = null;
+        state.prefetchError = null;
+        state.phase = 'idle';
+        state.failed = false;
+      } else {
+        if (!state.prefetch && !state.failed) prefetchNarration(landmark, state);
+        if (distance <= LANDMARK_RANGE) {
+          if (landmark.lore?.trim() && !state.failed) startNarration(landmark, state);
+        }
+      }
+    } else if (state.phase === 'narrating' && distance > APPROACH_RADIUS) {
+      if (activeNarration?.landmark.id === landmark.id) {
+        finishNarration(activeNarration, { fadeSeconds: WALK_AWAY_FADE_SECONDS });
+      }
+    } else if (state.phase === 'visited' && distance > APPROACH_RADIUS && now >= state.cooldownUntil) {
+      state.phase = 'idle';
+    }
+
+    const isActive = state.phase === 'approaching' || state.phase === 'narrating';
+    const progress = isActive ? THREE.MathUtils.clamp(1 - distance / APPROACH_RADIUS, 0, 1) : 0;
+    const pulse = reducedMotion ? 1 : 0.88 + 0.12 * Math.sin(now * 0.004);
+    landmark.marker.material.emissiveIntensity = 0.35 + progress * (1.3 + 0.5 * pulse);
+    landmark.beam.material.opacity = 0.3 + progress * 0.55 * pulse;
+    const beamHeight = landmark.baseBeamHeight * (1 + progress * 0.7);
+    landmark.beam.scale.y = beamHeight / landmark.baseBeamHeight;
+    landmark.beam.position.copy(landmark.position)
+      .addScaledVector(landmark.direction, landmark.beamBaseOffset + beamHeight / 2);
+
+    if (isActive && distance < labelDistance) {
+      labelLandmark = landmark;
+      labelDistance = distance;
+      labelOpacity = progress;
+    }
+  }
+  updateLandmarkLabel(labelLandmark, labelOpacity);
+}
+
+ui.narrationEnabled.addEventListener('change', () => {
+  narrationEnabled = ui.narrationEnabled.checked;
+  if (!narrationEnabled) {
+    stopNarration({ abortPrefetch: true });
+  } else {
+    for (const landmark of planet?.landmarks ?? []) {
+      const state = landmarkStates.get(landmark.id);
+      if (state?.phase === 'approaching') prefetchNarration(landmark, state);
+    }
+  }
+});
+
+ui.musicVolume.addEventListener('input', () => {
+  const volume = Number(ui.musicVolume.value);
+  music?.setVolume(volume);
+  if (volume > 0) lastMusicVolume = volume;
+  if (volume === 0) stopNarration({ abortPrefetch: true });
+  ui.musicMute.setAttribute('aria-pressed', String(volume === 0));
+  ui.musicMute.textContent = volume === 0 ? 'Unmute' : 'Mute';
+});
+
+ui.musicMute.addEventListener('click', () => {
+  const muted = ui.musicVolume.value !== '0';
+  if (muted) lastMusicVolume = Number(ui.musicVolume.value) || lastMusicVolume;
+  ui.musicVolume.value = muted ? '0' : String(lastMusicVolume);
+  music?.setVolume(Number(ui.musicVolume.value));
+  if (muted) stopNarration({ abortPrefetch: true });
+  ui.musicMute.setAttribute('aria-pressed', String(muted));
+  ui.musicMute.textContent = muted ? 'Unmute' : 'Mute';
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopNarration({ immediate: true, abortPrefetch: true });
+});
+addEventListener('pagehide', () => stopNarration({ immediate: true, abortPrefetch: true }));
+addEventListener('beforeunload', () => stopNarration({ immediate: true, abortPrefetch: true }));
 
 // ---------- Debug: height above the ground, measured from the real camera position ----------
 function heightAboveGround() {

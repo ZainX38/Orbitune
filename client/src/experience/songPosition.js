@@ -45,7 +45,9 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
 
   const master = ctx.createGain();
   master.gain.value = volume;
-  master.connect(ctx.destination);
+  const musicGain = ctx.createGain();
+  musicGain.gain.value = 1;
+  master.connect(musicGain).connect(ctx.destination);
 
   const voices = new Set(); // every source that still exists: the one playing + any that are fading out
   let voice = null;         // what is playing now: { source, gain, startedAt (context time), offset (song time) }
@@ -181,11 +183,17 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
     setTimeout(() => {
       for (const v of [...voices]) retire(v);
       master.disconnect();
+      musicGain.disconnect();
     }, (FADE + 0.1) * 1000);
   }
 
   return {
     start, seek, setFree, update, dispose,
+    musicGain,
+    setVolume(value) {
+      master.gain.setTargetAtTime(Math.max(0, Math.min(1, value)), ctx.currentTime, 0.03);
+    },
+    get volume() { return master.gain.value; },
     get time() { return timeAt(ctx.currentTime); },
     get playing() { return !!voice && ctx.state === 'running'; },
     get free() { return free; },

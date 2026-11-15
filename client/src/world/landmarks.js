@@ -32,8 +32,10 @@ export function placeLandmarks(group, terrain, blueprint, colour = blueprint.pal
   const tint = new THREE.Color(colour);
   const shellGeometry = cluster(1, 0.5), coreGeometry = cluster(0.5, 0);
 
-  for (const spot of terrain.landmarkSpots) {
+  for (const [index, spot] of terrain.landmarkSpots.entries()) {
     const lm = (blueprint.landmarks ?? []).find((l) => l.section === spot.type) ?? { name: spot.type, lore: '', kind: spot.type };
+    const idName = String(lm.name || spot.type).normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+    const id = `${spot.type}-${idName.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-|-$/g, '') || index}`;
     const dir = spot.dir.clone();
     const h = terrain.getHeight(dir);
 
@@ -66,8 +68,10 @@ export function placeLandmarks(group, terrain, blueprint, colour = blueprint.pal
     group.add(beam);
 
     out.push({
-      name: lm.name, lore: lm.lore, kind: lm.kind, section: spot.type, time: spot.time,
+      id, name: lm.name, lore: lm.lore, kind: lm.kind, section: spot.type, time: spot.time,
+      direction: dir.clone(),
       position: dir.clone().multiplyScalar(RADIUS + h), marker: crystal, beam, core,
+      baseBeamHeight: BEAM_HEIGHT, beamBaseOffset: TALLEST * 0.8,
     });
   }
   console.log('[landmarks]', out.map((l) => `${l.name} @ ${l.time.toFixed(1)}s`));

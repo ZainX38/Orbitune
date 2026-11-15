@@ -10,23 +10,12 @@
       content="Orbitune turns any song into a planet you can explore. Search for a song or upload one to begin."
     />
     <title>Orbitune</title>
-    <!-- The styles are linked here, not imported from JavaScript, so the
-         browser has them before it draws anything. Importing them from
-         main.js made the page flash unstyled on every refresh. -->
-    <link rel="stylesheet" href="/src/style.css" />
   </head>
-  <body class="home">
-    <div class="sheet">
-      <header class="sheet__title">
-        <h1>Orbitune</h1>
-        <p>Every song is a world. Go explore it.</p>
-      </header>
-
-      <!-- main.js puts the song picker in here. -->
-      <main id="app" class="sheet__picker"></main>
-
-    </div>
-
-    <script type="module" src="/src/main.js"></script>
+  <body>
+    <p>Opening the Song Planets experience... <a href="/mvp.html">Open it here</a>.</p>
+    <p>Looking for the song picker? <a href="/home.html">Go to the song picker</a>.</p>
+    <script>
+      location.replace(`/mvp.html${location.search}${location.hash}`);
+    </script>
   </body>
 </html>
