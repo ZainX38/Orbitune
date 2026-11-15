@@ -14,7 +14,7 @@ const galaxy = createGalaxy();
 const player = document.createElement('audio');
 player.controls = true; // show the play button and the time bar
 player.style.cssText = 'display: block; margin: 0 auto;';
-document.body.append(player);
+document.querySelector('.sheet').append(player);
 
 const app = document.querySelector('#app');
 const journeyStatus = document.createElement('p');

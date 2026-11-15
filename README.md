@@ -24,8 +24,8 @@ requirements before choosing a song; otherwise `/analyse` returns a 502.
 Set `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, and `ELEVENLABS_VOICE_ID` in
 `server\.env` for planet generation and landmark narration.
 
-The root URL opens the Song Planets MVP. The original song picker remains
-available at `http://localhost:5173/home.html`.
+The root URL opens the song picker and galaxy. The demo planet viewer remains
+available at `http://localhost:5173/mvp.html`.
 
 ## Pre-bake landmark narration
 

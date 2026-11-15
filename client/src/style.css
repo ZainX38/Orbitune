@@ -133,11 +133,10 @@ body.home {
   text-transform: uppercase;
 }
 
-/* ---- The temporary test player that main.js adds under the sheet ---- */
+/* ---- The temporary test player that main.js adds to the sheet ---- */
 
-body.home > audio {
+.sheet > audio {
   width: min(100%, 420px);
-  margin-top: 16px !important;
   color-scheme: dark;
   opacity: 0.85;
 }
