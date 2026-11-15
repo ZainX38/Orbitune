@@ -27,3 +27,8 @@ export function listPlanets() {
 export function getPlanet(id) {
   return request(`/planets/${encodeURIComponent(id)}`);
 }
+
+// The newest planets WITH features and blueprint, to draw them (the start page's galaxy).
+export function listFullPlanets(limit = 8) {
+  return request(`/planets?full=1&limit=${encodeURIComponent(limit)}`);
+}
