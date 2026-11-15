@@ -3,6 +3,9 @@
 import { createSongPicker } from './experience/ui/songPicker.js';
 import { savePlanetJourney } from './experience/planetJourney.js';
 import { savePlanet } from './api/planets.js';
+import { createGalaxy } from './ui/galaxy.js';
+
+createGalaxy();
 
 // TEMPORARY: a basic audio player, only here to check that the song picker
 // hands over working audio. Remove it once the real experience plays the song.
