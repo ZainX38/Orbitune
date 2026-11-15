@@ -1,51 +1,47 @@
-// Stylised low-poly flora. The Blueprint's `flora` names (free text from Gemini) pick 2-3 of the shapes below.
-// One InstancedMesh per shape. Plants sway with the mids and the glowing ones pulse on beats (see reactive.js).
+// Stylised flora: rounded, smooth-shaded shapes, halfway between realistic and cartoon.
+// The Blueprint's `flora` names (free text from Gemini) pick 2-3 of the shapes below.
+// One InstancedMesh per shape. Every plant has its own size, turn, lean and colour tint.
+// Plants sway with the mids and the glowing ones pulse on beats (see reactive.js).
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RADIUS } from './terrain.js';
 import { fbm, makeRng } from './noise.js';
+import { blob, lathe, shard, part } from './shapes.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
 // ---------- Building blocks ----------
-// One coloured piece of a plant. glow: 0 = normal, 1 = lights up (and pulses on beats).
-function part(geometry, colour, glow, { x = 0, y = 0, z = 0, rx = 0, rz = 0, sx = 1, sy = 1, sz = 1 } = {}) {
-  const g = geometry.index ? geometry.toNonIndexed() : geometry.clone();
-  g.deleteAttribute('uv');
-  g.applyMatrix4(new THREE.Matrix4().compose(
-    new THREE.Vector3(x, y, z),
-    new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, 0, rz)),
-    new THREE.Vector3(sx, sy, sz)
-  ));
-  const n = g.attributes.position.count;
-  const colours = new Float32Array(n * 3), glows = new Float32Array(n).fill(glow);
-  for (let i = 0; i < n; i++) colours.set([colour.r, colour.g, colour.b], i * 3);
-  g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
-  g.setAttribute('aGlow', new THREE.BufferAttribute(glows, 1));
-  return g;
-}
+// A trunk that is wider at the foot and flares a little into the ground
+const trunk = (radius, height) => lathe([[radius * 1.7, 0], [radius * 1.15, height * 0.12], [radius, height * 0.45], [radius * 0.72, height]], 7);
+// One tier of a conifer: a soft cone with a rounded skirt
+const tier = (radius, height) => lathe([[radius * 0.35, 0], [radius * 0.9, height * 0.02], [radius, height * 0.14], [radius * 0.78, height * 0.36], [radius * 0.42, height * 0.7], [radius * 0.08, height]], 9);
 
 // ---------- Shapes (base at the origin, +Y up, about 2-3 units tall) ----------
 const SHAPES = {
   pine: {
     match: /pine|fir|spruce|conifer|cedar|evergreen/,
     heights: [0.6, 8], scale: [0.7, 1.4],
-    build: (pal) => mergeGeometries([
-      part(new THREE.CylinderGeometry(0.1, 0.16, 0.7, 5), pal.trunk, 0, { y: 0.35 }),
-      part(new THREE.ConeGeometry(0.8, 1.1, 6), pal.foliage, 0, { y: 1.1 }),
-      part(new THREE.ConeGeometry(0.62, 1.0, 6), pal.foliage.clone().offsetHSL(0, 0, 0.04), 0, { y: 1.7 }),
-      part(new THREE.ConeGeometry(0.42, 0.9, 6), pal.foliage.clone().offsetHSL(0, 0, 0.08), 0, { y: 2.3 }),
-    ]),
+    build: (pal) => {
+      const dark = pal.foliage.clone().offsetHSL(0, 0, -0.03);
+      return mergeGeometries([
+        part(trunk(0.11, 1.0), pal.trunk, 0, { shade: 0.35 }),
+        part(tier(0.86, 1.15), dark, 0, { y: 0.6 }),
+        part(tier(0.68, 1.05), pal.foliage, 0, { y: 1.2, ry: 0.6 }),
+        part(tier(0.5, 0.95), pal.foliage.clone().offsetHSL(0, 0, 0.04), 0, { y: 1.75, ry: 1.3 }),
+        part(tier(0.32, 0.8), pal.foliage.clone().offsetHSL(0, 0, 0.08), 0, { y: 2.25, ry: 2.1 }),
+      ]);
+    },
   },
   blossom: {
     match: /blossom|bloom|flower|rose|cherry|sakura|bush|petal|magnolia/,
     heights: [0.5, 5.5], scale: [0.7, 1.3],
     build: (pal) => mergeGeometries([
-      part(new THREE.CylinderGeometry(0.09, 0.15, 1.2, 5), pal.trunk, 0, { y: 0.6, rz: 0.08 }),
-      part(new THREE.IcosahedronGeometry(0.8, 0), pal.blossom, 0.12, { y: 1.75, sy: 0.85 }),
-      part(new THREE.IcosahedronGeometry(0.55, 0), pal.blossom.clone().offsetHSL(0.02, 0, 0.07), 0.12, { x: 0.55, y: 1.45, z: 0.2 }),
-      part(new THREE.IcosahedronGeometry(0.5, 0), pal.blossom.clone().offsetHSL(-0.02, 0, -0.05), 0.12, { x: -0.45, y: 1.4, z: -0.3 }),
+      part(trunk(0.1, 1.35), pal.trunk, 0, { rz: 0.08, shade: 0.35 }),
+      part(blob(0.82, 2, 0.14, 1), pal.blossom, 0.1, { y: 1.85, sy: 0.82 }),
+      part(blob(0.56, 1, 0.14, 2), pal.blossom.clone().offsetHSL(0.02, 0, 0.06), 0.1, { x: 0.58, y: 1.5, z: 0.22 }),
+      part(blob(0.52, 1, 0.14, 3), pal.blossom.clone().offsetHSL(-0.02, 0, -0.05), 0.1, { x: -0.48, y: 1.45, z: -0.3 }),
+      part(blob(0.46, 1, 0.14, 4), pal.blossom.clone().offsetHSL(0.01, 0, 0.02), 0.1, { x: -0.05, y: 1.55, z: 0.55 }),
     ]),
   },
   palm: {
@@ -54,15 +50,16 @@ const SHAPES = {
     build: (pal) => {
       const leaf = pal.foliage.clone().lerp(pal.peaks, 0.35);
       const parts = [
-        part(new THREE.CylinderGeometry(0.08, 0.13, 1.3, 5), pal.trunk, 0, { y: 0.65, rz: 0.1 }),
-        part(new THREE.CylinderGeometry(0.06, 0.08, 1.2, 5), pal.trunk, 0, { x: -0.19, y: 1.85, rz: 0.2 }),
+        part(trunk(0.1, 1.35), pal.trunk, 0, { rz: 0.1, shade: 0.35 }),
+        part(lathe([[0.075, 0], [0.07, 0.6], [0.055, 1.2]], 7), pal.trunk, 0, { x: -0.13, y: 1.3, rz: 0.2, shade: 0.1 }),
+        part(blob(0.16, 1, 0.05, 5), pal.trunk.clone().offsetHSL(0, 0, -0.04), 0, { x: -0.37, y: 2.5 }),
       ];
-      for (let i = 0; i < 6; i++) { // fronds: flat cones drooping outwards from the top
-        const a = (i / 6) * Math.PI * 2;
-        const frond = part(new THREE.ConeGeometry(0.22, 1.5, 4), i % 2 ? leaf : leaf.clone().offsetHSL(0, 0, 0.06), 0, { y: 0.75, sz: 0.25 });
-        frond.applyMatrix4(new THREE.Matrix4().makeRotationZ(-1.95));        // tip out and down
+      for (let i = 0; i < 7; i++) { // fronds: long flat leaves arching outwards and down from the top
+        const a = (i / 7) * Math.PI * 2;
+        const frond = part(blob(1, 1, 0.04, 6), i % 2 ? leaf : leaf.clone().offsetHSL(0, 0, 0.06), 0, { x: 0.72, sx: 0.78, sy: 0.07, sz: 0.2, shade: 0 });
+        frond.applyMatrix4(new THREE.Matrix4().makeRotationZ(-0.42 - 0.16 * (i % 3))); // droop
         frond.applyMatrix4(new THREE.Matrix4().makeRotationY(a));
-        frond.applyMatrix4(new THREE.Matrix4().makeTranslation(-0.31, 2.4, 0));
+        frond.applyMatrix4(new THREE.Matrix4().makeTranslation(-0.37, 2.52, 0));
         parts.push(frond);
       }
       return mergeGeometries(parts);
@@ -72,9 +69,10 @@ const SHAPES = {
     match: /crystal|shard|spire|gem|glass|quartz|prism|neon/,
     heights: [0.8, 12], scale: [0.6, 1.6],
     build: (pal) => mergeGeometries([
-      part(new THREE.OctahedronGeometry(1, 0), pal.peaks, 1, { y: 1.3, sx: 0.32, sy: 1.5, sz: 0.32 }),
-      part(new THREE.OctahedronGeometry(1, 0), pal.peaks.clone().offsetHSL(0.05, 0, -0.05), 1, { x: 0.4, y: 0.7, rz: -0.45, sx: 0.22, sy: 0.9, sz: 0.22 }),
-      part(new THREE.OctahedronGeometry(1, 0), pal.peaks.clone().offsetHSL(-0.06, 0, 0.05), 1, { x: -0.3, y: 0.55, z: 0.2, rz: 0.5, rx: 0.3, sx: 0.18, sy: 0.7, sz: 0.18 }),
+      part(shard(0.3, 2.7, 0.24), pal.peaks, 1, { facet: true, shade: 0.45 }),
+      part(shard(0.2, 1.7, 0.28), pal.peaks.clone().offsetHSL(0.05, 0, -0.05), 1, { x: 0.3, rz: -0.42, ry: 0.5, facet: true, shade: 0.45 }),
+      part(shard(0.17, 1.3, 0.3), pal.peaks.clone().offsetHSL(-0.06, 0, 0.05), 1, { x: -0.24, z: 0.16, rz: 0.48, rx: 0.3, facet: true, shade: 0.45 }),
+      part(shard(0.12, 0.8, 0.35), pal.peaks.clone().offsetHSL(0.02, 0, 0.08), 1, { x: 0.05, z: -0.28, rx: -0.5, ry: 1, facet: true, shade: 0.45 }),
     ]),
   },
   mushroom: {
@@ -83,9 +81,10 @@ const SHAPES = {
     build: (pal, colours) => {
       const cap = colours.atmosphere.clone().lerp(pal.peaks, 0.3);
       return mergeGeometries([
-        part(new THREE.CylinderGeometry(0.1, 0.16, 1.2, 6), pal.sand, 0.15, { y: 0.6 }),
-        part(new THREE.ConeGeometry(0.75, 0.55, 7), cap, 1, { y: 1.4 }),
-        part(new THREE.CylinderGeometry(0.75, 0.6, 0.12, 7), cap.clone().offsetHSL(0, 0, 0.12), 1, { y: 1.08 }),
+        part(lathe([[0.2, 0], [0.13, 0.25], [0.1, 0.8], [0.14, 1.2]], 8), pal.sand, 0.15, { shade: 0.35 }),
+        // Cap: a dome with a rolled rim, and a paler underside
+        part(lathe([[0.3, 1.1], [0.78, 1.04], [0.86, 1.14], [0.74, 1.36], [0.46, 1.56], [0.02, 1.64]], 12), cap, 1, { shade: 0.15 }),
+        part(lathe([[0.02, 1.16], [0.3, 1.1], [0.78, 1.04]], 12), cap.clone().offsetHSL(0, 0, 0.12), 0.6, { shade: 0 }),
       ]);
     },
   },
@@ -95,9 +94,9 @@ const SHAPES = {
     build: (pal) => {
       const stalk = pal.peaks.clone().lerp(pal.ground, 0.35), head = pal.peaks.clone().offsetHSL(0, 0.1, 0.05);
       const parts = [];
-      [[0, 0, 2.0, 0], [0.22, 0.1, 1.5, -0.14], [-0.18, 0.15, 1.7, 0.12], [0.05, -0.22, 1.3, 0.05]].forEach(([x, z, h, lean]) => {
-        parts.push(part(new THREE.CylinderGeometry(0.035, 0.05, h, 4), stalk, 0, { x, z, y: h / 2, rz: lean }));
-        parts.push(part(new THREE.OctahedronGeometry(0.13, 0), head, 0.5, { x: x - Math.sin(lean) * h, z, y: h, sy: 2.2 }));
+      [[0, 0, 2.0, 0], [0.22, 0.1, 1.5, -0.14], [-0.18, 0.15, 1.7, 0.12], [0.05, -0.22, 1.3, 0.05], [-0.1, -0.12, 1.1, -0.08]].forEach(([x, z, h, lean], i) => {
+        parts.push(part(lathe([[0.055, 0], [0.04, h * 0.5], [0.028, h]], 5), stalk, 0, { x, z, rz: lean, shade: 0.4 }));
+        parts.push(part(blob(0.1, 1, 0.08, 7 + i), head, 0.5, { x: x - Math.sin(lean) * h, z, y: h * Math.cos(lean), sy: 2.4, shade: 0.15 }));
       });
       return mergeGeometries(parts);
     },
@@ -120,10 +119,10 @@ export function pickShapes(floraNames = []) {
 export function createFlora(terrain, blueprint, pal, colours, reactive, total = 950) {
   const group = new THREE.Group();
   const kinds = pickShapes(blueprint.flora);
-  const material = reactive.patch(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85 }), 'flora');
+  const material = reactive.patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0 }), 'flora');
 
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), spin = new THREE.Quaternion(), s = new THREE.Vector3();
-  const dir = new THREE.Vector3(), near = new THREE.Vector3(), p = new THREE.Vector3();
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), spin = new THREE.Quaternion(), lean = new THREE.Quaternion(), s = new THREE.Vector3();
+  const dir = new THREE.Vector3(), near = new THREE.Vector3(), p = new THREE.Vector3(), axis = new THREE.Vector3(), tint = new THREE.Color();
   const placedLog = [];
 
   kinds.forEach((kind, index) => {
@@ -153,13 +152,21 @@ export function createFlora(terrain, blueprint, pal, colours, reactive, total = 
       // h is the exact mesh height under the trunk's centre. Sink the base by what its own width can hang over
       // the downhill side of the steepest slope allowed above, so there is never a gap under it.
       p.copy(dir).multiplyScalar(RADIUS + h - 0.14 * k);
-      q.setFromUnitVectors(UP, dir).multiply(spin.setFromAxisAngle(UP, rng() * Math.PI * 2));
-      s.set(k, k * (0.85 + rng() * 0.3), k);
+      // Local "up" at this spot, then the plant's own turn, then a small lean (up to ~5 degrees) so no two stand alike
+      const turn = rng() * Math.PI * 2;
+      lean.setFromAxisAngle(axis.set(Math.cos(turn * 3.7), 0, Math.sin(turn * 3.7)), rng() * 0.09);
+      q.setFromUnitVectors(UP, dir).multiply(lean).multiply(spin.setFromAxisAngle(UP, turn));
+      s.set(k * (0.9 + rng() * 0.2), k * (0.82 + rng() * 0.36), k * (0.9 + rng() * 0.2));
       m.compose(p, q, s);
-      mesh.setMatrixAt(placed++, m);
+      mesh.setMatrixAt(placed, m);
+      // Colour: each plant a little lighter or darker, and a touch warmer or cooler (multiplies the vertex colours)
+      const light = 0.8 + rng() * 0.38, warm = (rng() - 0.5) * 0.14;
+      mesh.setColorAt(placed, tint.setRGB(light * (1 + warm), light, light * (1 - warm)));
+      placed++;
     }
-    mesh.count = placed;
+    mesh.count = mesh.userData.placed = placed; // userData.placed: the full number (QUALITY draws a share of it)
     mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.frustumCulled = false; // instances are all around the planet
     group.add(mesh);
     placedLog.push(`${placed} ${kind}`);

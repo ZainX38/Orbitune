@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { fbm, noise3, makeRng } from './noise.js';
 
 export const RADIUS = 50;
+const BUMP_WIDTH = 0.04; // chorus mountains and drop canyons: width along the equator, as a share of the song (0.04 = 12.5 units)
 const DEBUG = true;
 
 // ---------- Longitude <-> song time (the song runs once around the equator, eastwards) ----------
@@ -105,20 +106,25 @@ export function createTerrain(features, blueprint) {
     const soft = fbm(x * s, y * s, z * s, 4, seed);
     // Ridged noise: crests where the noise crosses zero (slightly rounded, so the mesh can follow them)
     const r = fbm(x * s * 1.6, y * s * 1.6, z * s * 1.6, 3, seed + 40);
-    const ridged = 0.42 - 2.3 * Math.sqrt(r * r + 0.004);
-    const continents = (soft + (ridged - soft) * shape.sharp * 0.75) * (0.6 + bass(u)) * shape.continentHeight; // bass -> landmasses
+    // (0.02 rounds the crest over about one triangle. A sharper crest is a row of spikes on the mesh.)
+    const ridged = 0.46 - 2.3 * Math.sqrt(r * r + 0.02);
+    const continents = (soft + (ridged - soft) * shape.sharp * 0.6) * (0.6 + bass(u)) * shape.continentHeight; // bass -> landmasses
     const hills = fbm(x * 3.5, y * 3.5, z * 3.5, 3, seed + 10) * mid(u) * shape.hillHeight * band;              // mids -> hills
-    const detail = noise3(x * 12, y * 12, z * 12, seed + 20) * treble(u) * 0.8;                                  // treble -> fine detail
+    // treble -> fine detail. Kept wider than a few triangles (about 7 units) and low: finer or taller than this,
+    // the mesh cannot follow it and it turns into spikes.
+    const detail = fbm(x * 7, y * 7, z * 7, 2, seed + 20) * treble(u) * 0.5;
     const ridge = loud(u) * 3 * band ** 3;                                                                       // loudness -> equator ridge
     return continents + hills + detail + ridge;
   }
 
-  function bumpHeight(u, band) {
+  // above: how far the ground is above the sea before the bump. A canyon is only cut into LAND: cut into the sea it
+  // was a dry, straight-edged trench in the water.
+  function bumpHeight(u, band, above) {
     let h = 0;
     for (const b of bumps) {
       const d = lonDist(u, b.u);
-      const g = Math.exp(-(d * d) / (2 * 0.03 * 0.03)) * band ** 6;
-      h += b.type === 'drop' ? -6 * g : 8 * g;
+      const g = Math.exp(-(d * d) / (2 * BUMP_WIDTH * BUMP_WIDTH)) * band ** 4; // a broad, round hill or valley
+      h += b.type === 'drop' ? -5 * g * clamp01(above / 1.5) : 6.5 * g;
     }
     return h;
   }
@@ -131,7 +137,8 @@ export function createTerrain(features, blueprint) {
     const lat = Math.asin(Math.max(-1, Math.min(1, y)));
     const band = Math.cos(lat); // 1 at the equator, 0 at the poles: the song is strongest along the equator
     // Flat oceans. Landmarks are added AFTER the sea clamp, so the canyon stays dry.
-    return Math.max(rawHeight(x, y, z, u, band), SEA_LEVEL) + bumpHeight(u, band);
+    const raw = rawHeight(x, y, z, u, band);
+    return Math.max(raw, SEA_LEVEL) + bumpHeight(u, band, raw - SEA_LEVEL);
   }
 
   // How deep the sea bed is under the (flat) water at dir. 0 on land. Only for colouring the water.

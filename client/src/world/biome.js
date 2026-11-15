@@ -55,13 +55,14 @@ export function makeColourer(pal, seaLevel, levels = { high: 4, peak: 8 }) {
       out.copy(pal.rock).lerp(pal.canyon, smoothstep(-0.3, -4, a)); // dry canyon floor
     } else {
       low.copy(pal.lush).lerp(pal.ground, smoothstep(0.3, 0.7, patch));
-      out.copy(pal.sand).lerp(low, smoothstep(0.25, 1.1, a));           // beach -> lowland
-      out.lerp(pal.highland, smoothstep(levels.high * 0.7, levels.peak, a)); // -> highland
-      const top = smoothstep(levels.peak, levels.peak * 1.35 + 0.5, a);
+      out.copy(pal.sand).lerp(low, smoothstep(0.15, 1.4, a));           // beach -> lowland
+      out.lerp(pal.highland, smoothstep(levels.high * 0.6, levels.peak, a)); // -> highland
+      const top = smoothstep(levels.peak * 0.9, levels.peak * 1.4 + 0.5, a);
       out.lerp(pal.peaks, top);                                         // -> peaks
-      out.lerp(pal.rock, smoothstep(0.07, 0.24, slope) * (1 - 0.65 * top) * 0.85); // rock on steep slopes
+      // Rock on steep slopes. The slope is that of a smooth (averaged) normal, so it is gentler than a single face's
+      out.lerp(pal.rock, smoothstep(0.03, 0.2, slope) * (1 - 0.65 * top) * 0.85);
     }
-    out.offsetHSL(0, 0, (jitter - 0.5) * 0.045); // tiny per-face variation = low-poly look
+    out.offsetHSL(0, 0, (jitter - 0.5) * 0.05); // subtle mottling, so large areas are not one flat colour
     return out;
   };
 }

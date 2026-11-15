@@ -1,19 +1,21 @@
 // MVP page: a planet made from a song, that reacts to the music, where your position controls the playback.
-//   Demo: orbit view -> click the planet to land. A selected journey enters the surface directly.
-//   Walk (the music follows your longitude) -> Esc back to orbit.
-// Demo mode uses public/demo/ and tempAnalysis.js; journey mode loads the selected song and server analysis from IndexedDB.
+//   orbit view -> click the planet to land -> walk (the music follows your longitude) -> Esc back to orbit
+// Demo songs are analysed in the browser; selected songs use the saved server analysis and blueprint.
 // Run `npm run dev` and open http://localhost:5173/mvp.html
 // Add ?nolock to the URL to test without capturing the mouse (drag to look, click the ground to walk).
+// Keys: F3 = debug overlay, Q = quality low / medium / high (also ?quality=low in the URL).
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPlanet } from '../world/planet.js';
+import { QUALITY, QUALITY_LEVELS, DEFAULT_QUALITY, nextQuality, applyRendererQuality, createAutoQuality } from '../world/quality.js';
 import { createPlayer, PLAYER_SCALE } from '../experience/player.js';
 import { createSongPosition, activeSources } from '../experience/songPosition.js';
-import { createFpsMeter, createDebugOverlay } from './debugOverlay.js';
 import { getPlanetJourney } from '../experience/planetJourney.js';
+import { createFpsMeter, createDebugOverlay } from './debugOverlay.js';
 import { analyseSong } from './tempAnalysis.js';
 import { DEMO_SONGS, makeBlueprint } from './demoBlueprints.js';
+import { validatePlanetData } from './planetData.js';
 
 // ---------- Settings ----------
 const LAND_TIME = 1.5;      // seconds, orbit -> surface
@@ -35,17 +37,19 @@ const HINTS = {
   loading: 'Listening to the song…',
   start: 'Click anywhere to start the music',
   orbit: 'Click the planet to land',
-  surface: 'WASD to walk · Shift to run · Esc to take off',
-  surfaceNoLock: 'WASD or click the ground to walk · Shift to run · drag to look · Esc to take off',
-  error: 'Could not form this planet. Check the console and try again.',
+  surface: 'WASD to walk · Shift to run · the beam of light is where the song is · Esc to take off',
+  surfaceNoLock: 'WASD or click the ground to walk · Shift to run · drag to look · the beam of light is where the song is · Esc to take off',
 };
 
 // ---------- Renderer, scene, camera ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping; // believable light: bright areas roll off instead of clipping
 renderer.toneMappingExposure = 1.0;
+// Pixel ratio and shadow maps: from the quality level (world/quality.js). It can change while running, see setQuality below.
+const params = new URLSearchParams(location.search);
+let quality = QUALITY_LEVELS.includes(params.get('quality')) ? params.get('quality') : DEFAULT_QUALITY;
+applyRendererQuality(renderer, quality);
 document.body.prepend(renderer.domElement);
 
 const SPACE = new THREE.Color('#05060d');
@@ -78,10 +82,10 @@ const stars = (() => {
 
 // ---------- State ----------
 const audioContext = new AudioContext(); // stays suspended until the first click or key press
-const useLock = !new URLSearchParams(location.search).has('nolock');
+const useLock = !params.has('nolock');
 const analysed = new Map(); // song id -> { features, audioBuffer } (so switching back is instant)
 
-let mode = 'loading'; // 'loading' | 'orbit' | 'landing' | 'surface' | 'takeoff' | 'error'
+let mode = 'loading'; // 'loading' | 'orbit' | 'landing' | 'surface' | 'takeoff'
 let move = null;      // the camera move running during 'landing' / 'takeoff'
 let song = null, planet = null, player = null, music = null, marker = null;
 let songTime = 0;
@@ -117,18 +121,19 @@ const ui = {
     const button = document.createElement('button');
     button.textContent = s.title;
     button.title = `${s.title} by ${s.artist}`;
-    button.addEventListener('click', () => { button.blur(); loadSong(i); });
+    button.dataset.songId = s.id;
+    button.addEventListener('click', () => { button.blur(); loadSong(s); });
     document.getElementById('songs').append(button);
     return button;
   }),
 };
-let hintText = null, timeText = null;
+let hintText = null, timeText = null, loadError = null;
 const clockText = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
 function updateHud() {
-  let hint = HINTS[mode] ?? '';
+  let hint = loadError ?? HINTS[mode] ?? '';
+  if (mode === 'orbit' && !music?.playing) hint = HINTS.start;
   if (mode === 'surface' && !player.locked) hint = HINTS.surfaceNoLock;
-  if (music && !music.playing) hint = HINTS.start;
   if (hint !== hintText) ui.hint.textContent = hintText = hint;
 
   if (!music) return;
@@ -175,7 +180,9 @@ function updateNearPlane() {
   setNear(THREE.MathUtils.clamp(height * NEAR_PER_HEIGHT, NEAR_MIN, NEAR_MAX));
 }
 
-// ---------- Playhead marker (orbit): a ring on the ground where the song is now ----------
+// ---------- Playhead marker: a ring on the ground where the song is now (orbit and surface) ----------
+const MARKER_BEAM = 16;           // height of the surface light beam
+const MARKER_SURFACE_SIZE = 0.4;  // ring size on the surface, relative to its orbit size
 function createMarker() {
   const group = new THREE.Group();
   const material = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, fog: false, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -184,17 +191,32 @@ function createMarker() {
   const pin = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.4, 4), material);
   pin.rotation.x = Math.PI;      // point down at the ground
   pin.position.y = 3.4;
-  group.add(ring, pin);
+  // Surface only: a tall beam of light, so the playhead can be seen coming from beyond the (very close) horizon
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05, 0.3, MARKER_BEAM, 10, 1, true).translate(0, MARKER_BEAM / 2, 0),
+    new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, fog: false, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  group.add(ring, pin, beam);
+  Object.assign(group.userData, { ring, pin, beam });
   return group;
 }
 
+// In orbit the marker sits on the equator. On the surface it is drawn at the music's longitude but at the PLAYER'S
+// latitude, so it always comes past the player: once per lap of the song.
 function updateMarker() {
   const dir = planet.directionAt(songTime, local);
+  const k = look * look * (3 - 2 * look); // 0 = orbit ... 1 = surface
+  if (k > 0) {
+    const y = THREE.MathUtils.clamp(player.getDirection().y, -0.98, 0.98) * k;
+    dir.multiplyScalar(Math.sqrt(1 - y * y)).setY(y);
+  }
   marker.quaternion.setFromUnitVectors(UP, dir);
-  marker.position.copy(dir).multiplyScalar(planet.radius + planet.getHeight(dir) + 0.5);
-  marker.visible = look < 0.5;
-  const pulse = 1 + 0.25 * beatPulse;
-  marker.scale.set(pulse, 1, pulse);
+  marker.position.copy(dir).multiplyScalar(planet.radius + planet.getHeight(dir) + THREE.MathUtils.lerp(0.5, 0.12, k));
+  const { ring, pin, beam } = marker.userData;
+  const size = THREE.MathUtils.lerp(1, MARKER_SURFACE_SIZE, k) * (1 + 0.25 * beatPulse);
+  ring.scale.setScalar(size);
+  pin.visible = k < 0.5;
+  beam.visible = k > 0;
+  beam.material.opacity = k * (0.22 + 0.3 * beatPulse);
 }
 
 // ---------- Songs ----------
@@ -204,12 +226,14 @@ function onBeat() {
   planet?.onBeat(1);
 }
 
-async function loadSong(selection, prepared = null, enterSurface = false) {
-  const index = Number.isInteger(selection) ? selection : null;
-  const next = index === null ? selection : DEMO_SONGS[index];
+async function loadSong(next, journey = null) {
   if (song?.id === next.id) return;
+  loadError = null;
   const id = ++loadId;
-  ui.buttons.forEach((b, i) => { b.setAttribute('aria-pressed', i === index); b.disabled = true; });
+  ui.buttons.forEach((button) => {
+    button.setAttribute('aria-pressed', button.dataset.songId === next.id);
+    button.disabled = true;
+  });
   console.log(`[mvp] loading "${next.title}"`);
 
   // Tear down the old world first
@@ -225,27 +249,22 @@ async function loadSong(selection, prepared = null, enterSurface = false) {
   updateHud();
 
   try {
-    let data = prepared;
-    if (prepared) {
-      if (!(prepared.blob instanceof Blob) || !prepared.audio || !prepared.world) {
-        throw new Error('The saved planet journey is missing its audio, analysis, or blueprint');
-      }
-      const audioBuffer = await audioContext.decodeAudioData(await prepared.blob.arrayBuffer());
-      data = { features: prepared.audio, blueprint: prepared.world, audioBuffer };
-    } else {
-      if (!analysed.has(next.id)) {
-        const response = await fetch(next.url);
-        if (!response.ok) throw new Error(`${next.url}: ${response.status}`);
-        analysed.set(next.id, await analyseSong(await response.arrayBuffer(), audioContext));
-      }
-      const { features, audioBuffer } = analysed.get(next.id);
-      data = { features, audioBuffer, blueprint: makeBlueprint(next.id, features) };
+    if (journey) {
+      const { audio, world } = validatePlanetData(journey);
+      if (!(journey.blob instanceof Blob)) throw new Error('Saved song audio is missing');
+      const audioBuffer = await audioContext.decodeAudioData(await journey.blob.arrayBuffer());
+      analysed.set(next.id, { features: audio, audioBuffer, blueprint: world });
+    } else if (!analysed.has(next.id)) {
+      const response = await fetch(next.url);
+      if (!response.ok) throw new Error(`${next.url}: ${response.status}`);
+      analysed.set(next.id, await analyseSong(await response.arrayBuffer(), audioContext));
     }
     if (id !== loadId) return; // another song was picked meanwhile
-    const { features, audioBuffer, blueprint } = data;
+    const { features, audioBuffer, blueprint: savedBlueprint } = analysed.get(next.id);
+    const blueprint = savedBlueprint ?? makeBlueprint(next.id, features);
 
     song = next;
-    planet = createPlanet(features, blueprint);
+    planet = createPlanet(features, blueprint, { quality });
     scene.add(planet.group);
     marker = createMarker();
     planet.group.add(marker);
@@ -259,7 +278,7 @@ async function loadSong(selection, prepared = null, enterSurface = false) {
     if (audioContext.state === 'running') music.start();
 
     ui.planet.textContent = planet.name;
-    ui.song.textContent = [song.title, song.artist, `${features.bpm} bpm`].filter(Boolean).join(' · ');
+    ui.song.textContent = `${song.title} · ${song.artist} · ${features.bpm} bpm`;
 
     // Back to a clean orbit view
     songTime = 0;
@@ -267,13 +286,45 @@ async function loadSong(selection, prepared = null, enterSurface = false) {
     facing = Math.atan2(camera.position.z, camera.position.x);
     planet.group.rotation.y = -facing;
     setMode('orbit');
-    if (enterSurface) land(new THREE.Vector3(1, 0, 0));
+    fpsMeter.reset(); autoQuality.hold(); // the build and the new shaders say nothing about the frame rate
   } catch (error) {
     console.error('[mvp] could not load the song', error);
-    setMode('error');
-    ui.hint.textContent = hintText = `Could not load "${next.title}". Check the console and try again.`;
+    loadError = `Could not load "${next.title}" (see the console)`;
   } finally {
-    if (id === loadId) ui.buttons.forEach((b) => { b.disabled = false; });
+    if (id === loadId) ui.buttons.forEach((button) => { button.disabled = false; });
+  }
+}
+
+function addJourneyButton(journey) {
+  const next = {
+    id: 'latest-journey',
+    title: journey.title || 'Your song',
+    artist: journey.artist || '',
+  };
+  const button = document.createElement('button');
+  button.textContent = next.title;
+  button.title = next.artist ? `${next.title} by ${next.artist}` : next.title;
+  button.dataset.songId = next.id;
+  button.addEventListener('click', () => { button.blur(); loadSong(next, journey); });
+  ui.buttons.unshift(button);
+  document.getElementById('songs').prepend(button);
+  return next;
+}
+
+async function startExperience() {
+  if (params.get('journey') !== 'latest') {
+    await loadSong(DEMO_SONGS[0]);
+    return;
+  }
+
+  try {
+    const journey = await getPlanetJourney();
+    if (!journey) throw new Error('No saved song journey was found');
+    const next = addJourneyButton(journey);
+    await loadSong(next, journey);
+  } catch (error) {
+    console.error('[mvp] could not open the saved planet', error);
+    loadError = 'Could not load your planet. Please return and try again.';
   }
 }
 
@@ -299,7 +350,7 @@ function land(localDirection) {
   const toPos = camera.position.clone(), toQuat = camera.quaternion.clone();
   camera.position.copy(fromPos); camera.quaternion.copy(fromQuat); // ...and then start from where we were
 
-  music.setFree(false); // from now on the landing spot decides what plays: the music jumps there right away
+  music.setFree(false); // the song carries on untouched. It only follows the player once they walk away from here
   console.log(`[mvp] landing at longitude ${(planet.timeAt(localDirection) / planet.duration).toFixed(3)} = song time ${planet.timeAt(localDirection).toFixed(2)}s`);
 
   move = {
@@ -470,6 +521,7 @@ function overlayLines() {
     `fps        ${num(fpsMeter.fps, 0)}   (worst frame ${num(fpsMeter.worst, 0)} ms)`,
     `triangles  ${info.triangles.toLocaleString('en')}   draw calls ${info.calls}`,
     `mode       ${mode}`,
+    `quality    ${quality}   pixel ratio ${num(renderer.getPixelRatio(), 2)}   auto ${autoQuality.enabled ? 'on' : `off (${autoQuality.note})`}`,
   ];
   if (!planet || !music) return lines;
   const at = planet.timeAt(listener);
@@ -483,6 +535,24 @@ function overlayLines() {
   );
   return lines;
 }
+
+// ---------- Quality: Q cycles low / medium / high. It also drops by itself when the frame rate stays low ----------
+function setQuality(name) {
+  if (!QUALITY[name] || name === quality) return;
+  console.log(`[mvp] quality: ${quality} -> ${name}`);
+  quality = name;
+  applyRendererQuality(renderer, quality); // pixel ratio, shadow maps
+  planet?.setQuality(quality);             // ground detail, shadows, how many plants, rocks and clouds
+  fpsMeter.reset();
+  autoQuality.hold();
+}
+const autoQuality = createAutoQuality({ get: () => quality, set: setQuality, log: (text) => console.log(`[mvp] ${text}`) });
+
+addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyQ' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  autoQuality.off('you chose with Q'); // a level picked by hand stays
+  setQuality(nextQuality(quality));
+});
 
 // ---------- Frame loop ----------
 // In orbit the planet turns so that the longitude that is playing faces the camera's side (`facing`)
@@ -498,6 +568,7 @@ renderer.setAnimationLoop((now) => {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   fpsMeter.tick(now);
+  autoQuality.update(dt, fpsMeter.fps, !!planet && mode !== 'loading' && !document.hidden && fpsMeter.full);
   beatPulse *= Math.exp(-dt * 6);
 
   if (planet && mode !== 'loading') {
@@ -526,34 +597,15 @@ renderer.setAnimationLoop((now) => {
 
   updateHud();
   renderer.render(scene, camera);
+  overlay.update(now, overlayLines); // after the render, so the triangle count is this frame's
 });
-
-async function startExperience() {
-  if (new URLSearchParams(location.search).get('journey') !== 'latest') {
-    await loadSong(0);
-    return;
-  }
-
-  try {
-    const journey = await getPlanetJourney();
-    if (!journey) throw new Error('No saved planet journey was found');
-    await loadSong({
-      id: 'selected-journey',
-      title: journey.title || 'Your song',
-      artist: journey.artist || '',
-    }, journey, true);
-  } catch (error) {
-    console.error('[mvp] could not open the saved planet journey', error);
-    setMode('error');
-    ui.hint.textContent = hintText = 'Could not open your planet. Return and analyse the song again.';
-  }
-}
 
 startExperience();
 
 // Handy in the browser console while testing
 window.mvp = {
-  camera, scene, renderer, land, takeOff, loadSong, overlay, fpsMeter, activeSources,
+  camera, scene, renderer, land, takeOff, loadSong, overlay, fpsMeter, activeSources, setQuality, autoQuality,
+  get quality() { return quality; },
   get planet() { return planet; }, get player() { return player; }, get music() { return music; },
   get mode() { return mode; }, get songTime() { return songTime; },
 };
