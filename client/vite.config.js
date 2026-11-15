@@ -1,5 +1,17 @@
 // Settings for Vite. Vite reads this file when you run `npm run dev`.
+import { resolve } from 'node:path';
+
+const root = import.meta.dirname;
+
 export default {
+  build: {
+    rollupOptions: {
+      input: {
+        index: resolve(root, 'index.html'),
+        mvp: resolve(root, 'mvp.html'),
+      },
+    },
+  },
   server: {
     // While developing, the website runs on port 5173 (Vite) and the API runs
     // on port 3000 (Express). The proxy makes Vite pass these requests on to

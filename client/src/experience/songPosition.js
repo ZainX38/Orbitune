@@ -22,6 +22,11 @@ const DEBUG = true;
 
 const mod = (a, n) => ((a % n) + n) % n;
 
+// Every source that exists right now, over ALL songs (also one that was disposed a moment ago).
+// 1 while playing, 2 only during a crossfade, 0 while a song loads. Anything else is a leak: the debug overlay shows it.
+let live = 0;
+export const activeSources = () => live;
+
 export function createSongPosition({ audioContext, audioBuffer, features, planet, onBeat, volume = 0.9 }) {
   const ctx = audioContext;
   const duration = audioBuffer.duration;
@@ -37,6 +42,8 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
   let pausedAt = 0;      // song time to start from
   let free = true;
   let lastJump = -1;
+  let lastSync = null;      // context time of the last re-sync (null = none yet)
+  let syncs = 0;            // how many re-syncs so far
   let lastTime = 0;      // song time at the previous update (for firing beats)
   let logTimer = 0;
   let listenerTime = 0;
@@ -114,6 +121,7 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
           log(`jump ${bars > 0 ? '+' : ''}${bars} bar(s): ${time.toFixed(2)}s -> ${target.toFixed(2)}s (listener at ${listenerTime.toFixed(2)}s)`);
           play(target);
           lastTime = time = target;
+          lastSync = ctx.currentTime; syncs++;
         }
       }
     }

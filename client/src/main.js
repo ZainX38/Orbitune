@@ -1,6 +1,7 @@
 // The starting point of the website. index.html loads this file, and this file
 // starts everything else. (The page's styles are loaded by index.html.)
 import { createSongPicker } from './experience/ui/songPicker.js';
+import { savePlanetJourney } from './experience/planetJourney.js';
 
 // TEMPORARY: a basic audio player, only here to check that the song picker
 // hands over working audio. Remove it once the real experience plays the song.
@@ -9,11 +10,47 @@ player.controls = true; // show the play button and the time bar
 player.style.cssText = 'display: block; margin: 0 auto;';
 document.body.append(player);
 
+const app = document.querySelector('#app');
+const journeyStatus = document.createElement('p');
+journeyStatus.className = 'planet-journey__status';
+journeyStatus.setAttribute('role', 'status');
+journeyStatus.hidden = true;
+
+const journeyButton = document.createElement('button');
+journeyButton.className = 'planet-journey__button';
+journeyButton.type = 'button';
+journeyButton.textContent = 'Enter your planet';
+journeyButton.hidden = true;
+
+let selectedJourney = null;
+let analysisId = 0;
+
+journeyButton.addEventListener('click', async () => {
+  if (!selectedJourney) return;
+  journeyButton.disabled = true;
+  journeyStatus.textContent = 'Opening your planet…';
+
+  try {
+    await savePlanetJourney(selectedJourney);
+    location.assign('/mvp.html?journey=latest');
+  } catch (error) {
+    console.error('Could not prepare the planet journey:', error);
+    journeyStatus.textContent = 'Could not open the planet. Please try again.';
+    journeyButton.disabled = false;
+  }
+});
+
 // Put the song picker inside the <div id="app"> from index.html.
-createSongPicker(document.querySelector('#app'), {
-  // Runs when the user has chosen a song.
-  // Later this is where the song gets handed to the audio analysis and /analyse.
+createSongPicker(app, {
+  // Analyse the selected song and keep the returned planet data with its audio.
   async onSongChosen(song) {
+    const currentAnalysisId = ++analysisId;
+    selectedJourney = null;
+    journeyButton.hidden = true;
+    journeyButton.disabled = false;
+    journeyStatus.hidden = false;
+    journeyStatus.textContent = `Analysing "${song.title}"…`;
+
     console.log('Song chosen:', song);
 
     // An <audio> element needs a URL, but the song is a Blob in memory.
@@ -40,9 +77,26 @@ createSongPicker(document.querySelector('#app'), {
       // result.world is the Blueprint from Gemini, or null if Gemini failed,
       // in which case result.worldError says why.
       const result = await res.json();
+      if (currentAnalysisId !== analysisId) return;
+      if (!result.audio) throw new Error('The analyser did not return audio features');
+      if (!result.world) throw new Error(result.worldError || 'Gemini did not return a world blueprint');
+
+      selectedJourney = {
+        blob: song.blob,
+        audio: result.audio,
+        world: result.world,
+        title: song.title,
+        artist: song.artist,
+      };
+      journeyStatus.textContent = `Your planet “${result.world.planetName}” is ready.`;
+      journeyButton.hidden = false;
       console.log('Analysis result:', result);
     } catch (err) {
-      console.error(err);
+      if (currentAnalysisId !== analysisId) return;
+      console.error('Could not analyse the selected song:', err);
+      journeyStatus.textContent = err.message || 'Analysis failed. Please choose another song.';
     }
   },
 });
+
+app.append(journeyStatus, journeyButton);

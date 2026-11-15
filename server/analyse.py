@@ -1,4 +1,7 @@
 import json
+import argparse
+import sys
+from pathlib import Path
 from typing import Literal
 import colorsys
 import librosa
@@ -8,7 +11,7 @@ from google import genai
 from pydantic import BaseModel
 from scipy.signal import find_peaks
 
-load_dotenv()  # reads GEMINI_API_KEY from a .env file in this folder or the project folder
+load_dotenv(Path(__file__).with_name(".env"))
 
 NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
@@ -184,21 +187,42 @@ Make everything consistent with the music."""
 # JSON. Anything else (warnings, debug notes) has to go to sys.stderr, or the
 # server will not be able to read the result.
 
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) < 2:
-        sys.exit("Usage: python analyse.py path/to/song.mp3")
-    path = sys.argv[1]  # the file path Express passes in
-
+def generate_planet_data(path):
     result = {"audio": get_audio_data(path), "world": None}
-
-    # The world needs Gemini. If that fails (no API key, no internet, quota),
-    # still send back the audio data, with the reason in "worldError".
     try:
         result["world"] = generate_world(path)
     except Exception as error:
         result["worldError"] = str(error)
         print(f"generate_world failed: {error}", file=sys.stderr)
+    return result
 
-    print(json.dumps(result))
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Analyse a song into Orbitune planet data."
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default="song.mp3",
+        help="audio file to analyse",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="print one combined JSON result for the Node server",
+    )
+    args = parser.parse_args()
+
+    planet_data = generate_planet_data(args.path)
+
+    if args.json:
+        print(json.dumps(planet_data))
+    else:
+        with open("world.json", "w") as f:
+            json.dump(planet_data["world"], f, indent=2)
+
+        with open("audio.json", "w") as f:
+            json.dump(planet_data["audio"], f, indent=2)
+
+        print("Saved world.json and audio.json")
