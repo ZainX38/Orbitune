@@ -13,139 +13,119 @@
   }
 }
 
-/* ---- Search box: a ruled entry line, not a filled pill ---- */
+/* ---- Search box ---- */
 
 .song-picker__input {
   display: block;
   width: 100%;
-  margin-top: 18px;
-  padding: 12px 2px 10px;
-  border: 0;
-  border-bottom: 1px solid var(--line-strong);
-  border-radius: 0;
-  background: transparent;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 12px;
+  background: rgb(5 6 15 / 0.55);
   color: var(--text);
-  font: 400 1.1875rem/1.3 var(--font-display);
+  font: 400 1.05rem/1.3 var(--font-text);
   appearance: none; /* stops phones adding their own rounded search style */
   transition: border-color 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out);
 }
 
 .song-picker__input:hover {
-  border-bottom-color: var(--muted);
+  border-color: var(--accent);
 }
 
 .song-picker__input:focus-visible {
   outline: none;
-  border-bottom-color: var(--accent);
-  box-shadow: 0 1px 0 0 var(--accent);
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 3px rgb(103 232 249 / 0.35);
 }
 
 /* The small "clear" cross that Chrome and Safari put in search boxes, redrawn
    in the page's text colour. */
 .song-picker__input::-webkit-search-cancel-button {
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   margin-left: 10px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M3 3l12 12M15 3L3 15' stroke='%23ece6d8' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E")
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M3 3l12 12M15 3L3 15' stroke='%23eef0ff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
     center / contain no-repeat;
   cursor: pointer;
 }
 
 .song-picker__input::placeholder {
-  color: var(--faint);
-  font-style: italic;
+  color: var(--muted);
   opacity: 1; /* Firefox fades placeholders by default */
 }
 
-/* ---- Status line ("Searching…", "Selected: …", errors): instrument readout ---- */
+/* ---- Status line ("Searching…", "Selected: …", errors) ---- */
 
 .song-picker__status {
-  min-height: 1.5em; /* keeps the layout still when the message is empty */
-  margin: 10px 0 12px;
+  min-height: 1.45em; /* keeps the layout still when the message is empty */
+  margin: 10px 0;
   color: var(--muted);
-  font: 400 0.8125rem/1.5 var(--font-data);
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 /* ---- Results ---- */
 
 .song-picker__results {
   /* About five and a half rows, so the cut-off row shows there is more to scroll. */
-  max-height: min(330px, 42vh);
-  margin: 0 -8px;
+  max-height: min(336px, 46vh);
+  margin: 0;
   padding: 0;
   overflow-y: auto;
   list-style: none;
   scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-color: var(--accent) transparent;
 }
 
 /* The rules above and below the list only show when it has songs in it. */
 .song-picker__results:not(:empty) {
-  border-block: 1px solid var(--line);
+  border-block: 1px solid var(--panel-border);
 }
 
 .song-picker__results li + li {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--panel-border);
 }
 
 .song-picker__row {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
   width: 100%;
   min-height: 60px;
-  padding: 8px;
+  padding: 8px 10px;
   border: 0;
-  border-radius: 0;
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.15s var(--ease-out);
-}
-
-/* A red-light marker at the left edge shows which row the pointer is on. */
-.song-picker__row::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 1px;
-  height: 0;
-  background: var(--accent);
-  transition: height 0.2s var(--ease-out), top 0.2s var(--ease-out);
+  transition: background-color 0.18s var(--ease-out);
 }
 
 .song-picker__row:hover,
 .song-picker__row:focus-visible {
-  background: var(--plate-hover);
-}
-
-.song-picker__row:hover::before,
-.song-picker__row:focus-visible::before {
-  top: 14%;
-  height: 72%;
+  background: var(--panel-hover);
 }
 
 .song-picker__row:active {
-  background: var(--accent-dim);
+  background: rgb(103 232 249 / 0.16);
 }
 
 /* The list scrolls, so the focus ring is drawn inside the row to avoid
    being cut off at the edges. */
 .song-picker__row:focus-visible {
-  outline-offset: -2px;
+  outline-offset: -3px;
 }
 
 .song-picker__cover {
   flex: none;
   width: 44px;
   height: 44px;
-  border: 1px solid var(--line);
-  border-radius: 0;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 6px;
   background: var(--space-bg-2); /* shows if a song has no cover art */
   object-fit: cover;
 }
@@ -153,7 +133,6 @@
 .song-picker__text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   min-width: 0; /* lets long titles shrink and be cut off with "…" */
 }
 
@@ -165,12 +144,14 @@
 }
 
 .song-picker__title {
-  font: 500 1.0625rem/1.25 var(--font-display);
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .song-picker__artist {
   color: var(--muted);
-  font: 400 0.75rem/1.4 var(--font-data);
+  font-size: 0.875rem;
+  line-height: 1.35;
 }
 
 /* ---- "or" divider, with a line on each side ---- */
@@ -180,8 +161,10 @@
   align-items: center;
   gap: 14px;
   margin: 18px 0;
-  color: var(--faint);
-  font: italic 400 1rem/1 var(--font-display);
+  color: var(--muted);
+  font: 600 0.95rem/1 var(--font-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .song-picker__divider::before,
@@ -189,40 +172,39 @@
   content: '';
   flex: 1;
   height: 1px;
-  background: var(--line);
+  background: var(--panel-border);
 }
 
-/* ---- Upload button: the quiet second option ---- */
+/* ---- Upload button ---- */
 
 .song-picker__upload {
   width: 100%;
-  min-height: 48px;
+  min-height: 54px;
   padding: 12px 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
+  border: 1px dashed var(--panel-border-strong);
+  border-radius: 12px;
   background: transparent;
   color: var(--text);
-  font: 500 0.8125rem/1.2 var(--font-data);
-  letter-spacing: 0.06em;
+  font: 600 1.05rem/1.2 var(--font-label);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+  transition: background-color 0.18s var(--ease-out), border-color 0.18s var(--ease-out);
 }
 
 .song-picker__upload:hover,
 .song-picker__upload:focus-visible {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--accent-2);
+  background: rgb(103 232 249 / 0.1);
 }
 
 .song-picker__upload:active {
-  background: var(--accent-dim);
+  background: rgb(103 232 249 / 0.18);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .song-picker__input,
   .song-picker__row,
-  .song-picker__row::before,
   .song-picker__upload {
     transition: none;
   }
