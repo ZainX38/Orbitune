@@ -8,27 +8,35 @@
 @import '@fontsource/public-sans/latin-ext-400.css';
 @import '@fontsource/public-sans/latin-ext-600.css';
 
-/* The look is a planetary survey map: pale paper, black ink, and five flat
-   map colours. Every colour and font on the site comes from this list, so
-   change them here and nowhere else. */
+/* ---- The space colour scheme ----
+   Every colour on the site comes from this list (index.html and mvp.html both
+   load this file), so change them here and nowhere else.
+   Contrast on --space-bg / --panel: --text ~16:1, --muted ~8:1, --accent ~7:1. */
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  --paper: #ece7d6;
-  --paper-light: #f7f3e7;
-  --ink: #1f2227;
-  --ink-soft: #55574f;
-  --rule-soft: #c4bda8;
+  --space-bg: #05060f;
+  --space-bg-2: #0a0f2c;
+  --nebula-1: rgb(124 92 255 / 0.16);  /* violet haze */
+  --nebula-2: rgb(56 189 248 / 0.1);   /* cyan haze */
 
-  --lavender: #b3a2d4;
-  --mustard: #d8ae3f;
-  --sage: #98bd94;
-  --salmon: #e59273;
-  --sea: #8cbfd9;
+  --panel: rgb(13 17 40 / 0.62);         /* translucent "glass" */
+  --panel-strong: rgb(16 20 46 / 0.86);  /* glass over busy backgrounds (tooltips, HUD) */
+  --panel-hover: rgb(167 139 250 / 0.14);
+  --panel-border: rgb(170 180 255 / 0.18);
+  --panel-border-strong: rgb(190 200 255 / 0.42);
 
-  --font-label: 'Barlow Condensed', 'Arial Narrow', sans-serif; /* titles and map labels */
+  --text: #eef0ff;
+  --muted: #a9b0d4;
+  --accent: #a78bfa;      /* violet */
+  --accent-2: #67e8f9;    /* cyan */
+  --accent-ink: #0b0820;  /* text on an accent fill */
+  --focus: var(--accent-2);
+
+  --font-label: 'Barlow Condensed', 'Arial Narrow', sans-serif; /* titles and labels */
   --font-text: 'Public Sans', system-ui, 'Segoe UI', sans-serif; /* anything read as a sentence */
 
+  --radius: 16px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -38,101 +46,107 @@
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  padding: clamp(8px, 1.6vw, 20px);
-  background: var(--paper);
-  color: var(--ink);
-  font: 400 1rem/1.5 var(--font-text);
-  caret-color: var(--ink);
-  scrollbar-color: var(--ink) var(--paper);
-}
-
 ::selection {
-  background: var(--mustard);
-  color: var(--ink);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
-/* One focus style for every control: a solid ink ring. */
+/* One focus style for every control: a cyan ring. */
 :focus-visible {
-  outline: 3px solid var(--ink);
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
-/* ---- The sheet ---- */
+/* ---- The start page ---- */
 
-/* The double border is the "neatline" that frames a printed map. */
-.sheet {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    'title'
-    'picker';
-  gap: clamp(20px, 5vw, 28px);
-  margin-bottom: 16px;
-  padding: clamp(20px, 5vw, 56px);
-  border: 2px solid var(--ink);
+html:has(body.home) {
+  background: var(--space-bg);
 }
 
-.sheet::before {
-  content: '';
-  position: absolute;
-  inset: 5px;
-  border: 1px solid var(--ink);
-  pointer-events: none;
+body.home {
+  display: grid;
+  place-items: center;
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 24px 16px;
+  /* Deep space: near-black to navy, with two faint nebula clouds. */
+  background:
+    radial-gradient(ellipse 60% 45% at 18% 22%, var(--nebula-1), transparent 70%),
+    radial-gradient(ellipse 55% 40% at 85% 80%, var(--nebula-2), transparent 70%),
+    linear-gradient(160deg, var(--space-bg) 0%, var(--space-bg-2) 55%, var(--space-bg) 100%);
+  background-attachment: fixed;
+  color: var(--text);
+  font: 400 1rem/1.5 var(--font-text);
+  caret-color: var(--accent-2);
+  scrollbar-color: var(--accent) transparent;
+}
+
+/* The centre column: title and song picker. Planets float around it. */
+.sheet {
+  display: grid;
+  gap: 20px;
+  width: min(100%, 440px);
 }
 
 .sheet__title {
-  grid-area: title;
+  text-align: center;
+  text-shadow: 0 2px 24px rgb(5 6 15 / 0.9);
 }
 
 .sheet__title h1 {
   margin: 0;
-  font: 700 clamp(3.75rem, 17vw, 6rem) / 0.86 var(--font-label);
-  letter-spacing: -0.01em;
+  font: 700 clamp(3.25rem, 14vw, 5rem) / 0.9 var(--font-label);
+  letter-spacing: 0.02em;
   text-transform: uppercase;
+  background: linear-gradient(100deg, var(--text) 30%, var(--accent) 65%, var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .sheet__title p {
-  margin: 14px 0 0;
-  font-size: clamp(1.05rem, 2.6vw, 1.3rem);
-  line-height: 1.3;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 2.6vw, 1.15rem);
   text-wrap: balance;
 }
 
 /* The song picker is added by JavaScript a moment after the page is drawn.
-   Holding its space open (247px is its height before any search) stops the
-   things below it from jumping down when it arrives. */
+   Holding its space open stops the page from jumping when it arrives. */
 .sheet__picker {
-  grid-area: picker;
   min-width: 0;
   min-height: 247px;
+  padding: 20px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.06);
 }
 
-/* The song picker heading. */
 .song-picker__heading {
   margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--panel-border);
   font: 600 1.15rem/1.2 var(--font-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.song-picker__heading {
-  padding-bottom: 8px;
-  border-bottom: 1.5px solid var(--ink);
-}
-
 /* ---- The temporary test player that main.js adds under the sheet ---- */
 
-body > audio {
+body.home > audio {
   width: min(100%, 420px);
+  margin-top: 16px !important;
+  color-scheme: dark;
+  opacity: 0.85;
 }
 
 .planet-journey__status {
   margin: 18px 0 10px;
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
@@ -140,21 +154,22 @@ body > audio {
   width: 100%;
   min-height: 54px;
   padding: 12px 16px;
-  border: 1.5px solid var(--ink);
-  border-radius: 0;
-  background: var(--ink);
-  color: var(--paper-light);
-  font: 600 1.05rem/1.2 var(--font-label);
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(100deg, var(--accent), var(--accent-2));
+  color: var(--accent-ink);
+  font: 700 1.05rem/1.2 var(--font-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background-color 0.18s var(--ease-out), color 0.18s var(--ease-out);
+  box-shadow: 0 0 0 0 rgb(167 139 250 / 0);
+  transition: box-shadow 0.2s var(--ease-out), transform 0.2s var(--ease-out);
 }
 
 .planet-journey__button:hover,
 .planet-journey__button:focus-visible {
-  background: var(--mustard);
-  color: var(--ink);
+  box-shadow: 0 0 28px rgb(167 139 250 / 0.55);
+  transform: translateY(-1px);
 }
 
 .planet-journey__button:disabled {
@@ -167,25 +182,48 @@ body > audio {
   display: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .planet-journey__button {
-    transition: none;
-  }
-}
-
 @keyframes print {
   from {
     opacity: 0;
   }
 }
 
-/* ---- Galaxy of saved planets, behind the page ---- */
+/* ---- Starfield (starfield.js): three tiled layers drifting at different speeds ---- */
+
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.starfield__layer {
+  position: absolute;
+  top: calc(-1 * var(--tile));
+  left: calc(-1 * var(--tile));
+  right: 0;
+  bottom: 0;
+  background-size: var(--tile) var(--tile);
+  will-change: transform;
+  animation: drift var(--drift) linear infinite;
+}
+
+@keyframes drift {
+  to {
+    transform: translate3d(var(--tile), var(--tile), 0);
+  }
+}
+
+/* ---- Galaxy of saved planets (galaxy.js), behind the page ---- */
+
 .galaxy {
   position: fixed;
   inset: 0;
   z-index: -1;
   width: 100%;
   height: 100%;
+  display: block;
 }
 
 .galaxy__tooltip {
@@ -193,13 +231,116 @@ body > audio {
   top: 0;
   left: 0;
   z-index: 10;
-  max-width: 260px;
-  padding: 10px 12px;
-  border: 2px solid var(--ink);
-  background: var(--paper-light);
+  max-width: 280px;
+  padding: 12px 14px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 12px;
+  background: var(--panel-strong);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.5);
+  color: var(--text);
   pointer-events: none;
 }
 
-.galaxy__tooltip strong { display: block; font: 600 1.1rem var(--font-label); }
-.galaxy__tooltip span { display: block; color: var(--ink-soft); font-size: 0.85rem; }
-.galaxy__tooltip p { margin: 6px 0 0; font-size: 0.85rem; }
+.galaxy__tooltip strong {
+  display: block;
+  font: 600 1.2rem/1.2 var(--font-label);
+  letter-spacing: 0.03em;
+  color: var(--accent);
+}
+
+.galaxy__tooltip span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.875rem;
+}
+
+.galaxy__tooltip p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.825rem;
+}
+
+/* "Your planets": the same planets as a list, for keyboards and screen readers. */
+.planet-list {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 5;
+  max-width: min(320px, calc(100vw - 32px));
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: var(--panel-strong);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.planet-list[hidden] {
+  display: none;
+}
+
+.planet-list summary {
+  padding: 10px 14px;
+  font: 600 0.95rem/1.2 var(--font-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.planet-list summary:hover {
+  color: var(--accent-2);
+}
+
+.planet-list ul {
+  max-height: 50vh;
+  margin: 0;
+  padding: 0 6px 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.planet-list a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.planet-list a:hover,
+.planet-list a:focus-visible {
+  background: var(--panel-hover);
+}
+
+.planet-list a strong {
+  display: block;
+  color: var(--accent);
+  font: 600 1.05rem/1.2 var(--font-label);
+  letter-spacing: 0.03em;
+}
+
+.planet-list a span {
+  display: block;
+  color: var(--muted);
+}
+
+/* ---- Less motion: no drifting stars, no hover movement ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  .starfield__layer {
+    animation: none;
+  }
+
+  .planet-journey__button {
+    transition: none;
+  }
+
+  .planet-journey__button:hover,
+  .planet-journey__button:focus-visible {
+    transform: none;
+  }
+}

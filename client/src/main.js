@@ -4,7 +4,9 @@ import { createSongPicker } from './experience/ui/songPicker.js';
 import { savePlanetJourney } from './experience/planetJourney.js';
 import { savePlanet } from './api/planets.js';
 import { createGalaxy } from './ui/galaxy.js';
+import { createStarfield } from './ui/starfield.js';
 
+createStarfield();
 createGalaxy();
 
 // TEMPORARY: a basic audio player, only here to check that the song picker
