@@ -150,8 +150,9 @@ export function createPlanet(features, blueprint) {
     atmosphere.sky.material.uniforms.skyColor.value.copy(colours.sky);
 
     for (const l of landmarks) {
-      l.marker.material.emissiveIntensity = 0.8 + beat * 1.6 + loud * 0.5;
-      l.marker.rotateY(dt * 0.8);
+      // The crystal is rooted in the ground, so it does not spin: its glow does the moving
+      l.marker.material.emissiveIntensity = 0.3 + beat * 0.9 + loud * 0.3;
+      l.core.material.color.copy(l.core.userData.base).multiplyScalar(0.7 + beat * 1.1 + loud * 0.4);
       l.beam.material.opacity = 0.14 + 0.1 * loud + 0.25 * beat;
     }
   };
