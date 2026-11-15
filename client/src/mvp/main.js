@@ -1,6 +1,7 @@
 // MVP page: a planet made from a song, that reacts to the music, where your position controls the playback.
-//   orbit view -> click the planet to land -> walk (the music follows your longitude) -> Esc back to orbit
-// No server needed: the two demo songs are in public/demo/, analysed in the browser (tempAnalysis.js).
+//   Demo: orbit view -> click the planet to land. A selected journey enters the surface directly.
+//   Walk (the music follows your longitude) -> Esc back to orbit.
+// Demo mode uses public/demo/ and tempAnalysis.js; journey mode loads the selected song and server analysis from IndexedDB.
 // Run `npm run dev` and open http://localhost:5173/mvp.html
 // Add ?nolock to the URL to test without capturing the mouse (drag to look, click the ground to walk).
 
@@ -9,6 +10,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPlanet } from '../world/planet.js';
 import { createPlayer, PLAYER_SCALE } from '../experience/player.js';
 import { createSongPosition } from '../experience/songPosition.js';
+import { getPlanetJourney } from '../experience/planetJourney.js';
 import { analyseSong } from './tempAnalysis.js';
 import { DEMO_SONGS, makeBlueprint } from './demoBlueprints.js';
 
@@ -34,6 +36,7 @@ const HINTS = {
   orbit: 'Click the planet to land',
   surface: 'WASD to walk · Shift to run · Esc to take off',
   surfaceNoLock: 'WASD or click the ground to walk · Shift to run · drag to look · Esc to take off',
+  error: 'Could not form this planet. Check the console and try again.',
 };
 
 // ---------- Renderer, scene, camera ----------
@@ -77,7 +80,7 @@ const audioContext = new AudioContext(); // stays suspended until the first clic
 const useLock = !new URLSearchParams(location.search).has('nolock');
 const analysed = new Map(); // song id -> { features, audioBuffer } (so switching back is instant)
 
-let mode = 'loading'; // 'loading' | 'orbit' | 'landing' | 'surface' | 'takeoff'
+let mode = 'loading'; // 'loading' | 'orbit' | 'landing' | 'surface' | 'takeoff' | 'error'
 let move = null;      // the camera move running during 'landing' / 'takeoff'
 let song = null, planet = null, player = null, music = null, marker = null;
 let songTime = 0;
@@ -123,8 +126,8 @@ const clockText = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).pad
 
 function updateHud() {
   let hint = HINTS[mode] ?? '';
-  if (mode === 'orbit' && !music?.playing) hint = HINTS.start;
   if (mode === 'surface' && !player.locked) hint = HINTS.surfaceNoLock;
+  if (music && !music.playing) hint = HINTS.start;
   if (hint !== hintText) ui.hint.textContent = hintText = hint;
 
   if (!music) return;
@@ -200,9 +203,10 @@ function onBeat() {
   planet?.onBeat(1);
 }
 
-async function loadSong(index) {
-  const next = DEMO_SONGS[index];
-  if (song === next) return;
+async function loadSong(selection, prepared = null, enterSurface = false) {
+  const index = Number.isInteger(selection) ? selection : null;
+  const next = index === null ? selection : DEMO_SONGS[index];
+  if (song?.id === next.id) return;
   const id = ++loadId;
   ui.buttons.forEach((b, i) => { b.setAttribute('aria-pressed', i === index); b.disabled = true; });
   console.log(`[mvp] loading "${next.title}"`);
@@ -220,14 +224,24 @@ async function loadSong(index) {
   updateHud();
 
   try {
-    if (!analysed.has(next.id)) {
-      const response = await fetch(next.url);
-      if (!response.ok) throw new Error(`${next.url}: ${response.status}`);
-      analysed.set(next.id, await analyseSong(await response.arrayBuffer(), audioContext));
+    let data = prepared;
+    if (prepared) {
+      if (!(prepared.blob instanceof Blob) || !prepared.audio || !prepared.world) {
+        throw new Error('The saved planet journey is missing its audio, analysis, or blueprint');
+      }
+      const audioBuffer = await audioContext.decodeAudioData(await prepared.blob.arrayBuffer());
+      data = { features: prepared.audio, blueprint: prepared.world, audioBuffer };
+    } else {
+      if (!analysed.has(next.id)) {
+        const response = await fetch(next.url);
+        if (!response.ok) throw new Error(`${next.url}: ${response.status}`);
+        analysed.set(next.id, await analyseSong(await response.arrayBuffer(), audioContext));
+      }
+      const { features, audioBuffer } = analysed.get(next.id);
+      data = { features, audioBuffer, blueprint: makeBlueprint(next.id, features) };
     }
     if (id !== loadId) return; // another song was picked meanwhile
-    const { features, audioBuffer } = analysed.get(next.id);
-    const blueprint = makeBlueprint(next.id, features);
+    const { features, audioBuffer, blueprint } = data;
 
     song = next;
     planet = createPlanet(features, blueprint);
@@ -244,7 +258,7 @@ async function loadSong(index) {
     if (audioContext.state === 'running') music.start();
 
     ui.planet.textContent = planet.name;
-    ui.song.textContent = `${song.title} · ${song.artist} · ${features.bpm} bpm`;
+    ui.song.textContent = [song.title, song.artist, `${features.bpm} bpm`].filter(Boolean).join(' · ');
 
     // Back to a clean orbit view
     songTime = 0;
@@ -252,9 +266,11 @@ async function loadSong(index) {
     facing = Math.atan2(camera.position.z, camera.position.x);
     planet.group.rotation.y = -facing;
     setMode('orbit');
+    if (enterSurface) land(new THREE.Vector3(1, 0, 0));
   } catch (error) {
     console.error('[mvp] could not load the song', error);
-    ui.hint.textContent = hintText = `Could not load "${next.title}" (see the console)`;
+    setMode('error');
+    ui.hint.textContent = hintText = `Could not load "${next.title}". Check the console and try again.`;
   } finally {
     if (id === loadId) ui.buttons.forEach((b) => { b.disabled = false; });
   }
@@ -434,7 +450,28 @@ renderer.setAnimationLoop((now) => {
   renderer.render(scene, camera);
 });
 
-loadSong(0);
+async function startExperience() {
+  if (new URLSearchParams(location.search).get('journey') !== 'latest') {
+    await loadSong(0);
+    return;
+  }
+
+  try {
+    const journey = await getPlanetJourney();
+    if (!journey) throw new Error('No saved planet journey was found');
+    await loadSong({
+      id: 'selected-journey',
+      title: journey.title || 'Your song',
+      artist: journey.artist || '',
+    }, journey, true);
+  } catch (error) {
+    console.error('[mvp] could not open the saved planet journey', error);
+    setMode('error');
+    ui.hint.textContent = hintText = 'Could not open your planet. Return and analyse the song again.';
+  }
+}
+
+startExperience();
 
 // Handy in the browser console while testing
 window.mvp = {
