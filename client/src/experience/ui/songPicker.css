@@ -19,34 +19,34 @@
   display: block;
   width: 100%;
   margin-top: 16px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--panel-border-strong);
-  border-radius: 12px;
-  background: rgb(5 6 15 / 0.55);
+  border-radius: var(--radius-sm);
+  background: rgb(4 5 10 / 0.6);
   color: var(--text);
-  font: 400 1.05rem/1.3 var(--font-text);
+  font: 400 1rem/1.3 var(--font-text);
   appearance: none; /* stops phones adding their own rounded search style */
   transition: border-color 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out);
 }
 
 .song-picker__input:hover {
-  border-color: var(--accent);
+  border-color: rgb(255 255 255 / 0.36);
 }
 
 .song-picker__input:focus-visible {
   outline: none;
-  border-color: var(--accent-2);
-  box-shadow: 0 0 0 3px rgb(103 232 249 / 0.35);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 /* The small "clear" cross that Chrome and Safari put in search boxes, redrawn
    in the page's text colour. */
 .song-picker__input::-webkit-search-cancel-button {
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   margin-left: 10px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M3 3l12 12M15 3L3 15' stroke='%23eef0ff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M3 3l12 12M15 3L3 15' stroke='%23eef1f5' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E")
     center / contain no-repeat;
   cursor: pointer;
 }
@@ -62,7 +62,7 @@
   min-height: 1.45em; /* keeps the layout still when the message is empty */
   margin: 10px 0;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
@@ -76,7 +76,7 @@
   overflow-y: auto;
   list-style: none;
   scrollbar-width: thin;
-  scrollbar-color: var(--accent) transparent;
+  scrollbar-color: var(--panel-border-strong) transparent;
 }
 
 /* The rules above and below the list only show when it has songs in it. */
@@ -96,13 +96,13 @@
   min-height: 60px;
   padding: 8px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.18s var(--ease-out);
+  transition: background-color 0.15s var(--ease-out);
 }
 
 .song-picker__row:hover,
@@ -111,21 +111,21 @@
 }
 
 .song-picker__row:active {
-  background: rgb(103 232 249 / 0.16);
+  background: var(--accent-soft);
 }
 
 /* The list scrolls, so the focus ring is drawn inside the row to avoid
    being cut off at the edges. */
 .song-picker__row:focus-visible {
-  outline-offset: -3px;
+  outline-offset: -2px;
 }
 
 .song-picker__cover {
   flex: none;
   width: 44px;
   height: 44px;
-  border: 1px solid var(--panel-border-strong);
-  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
   background: var(--space-bg-2); /* shows if a song has no cover art */
   object-fit: cover;
 }
@@ -145,12 +145,13 @@
 
 .song-picker__title {
   font-weight: 600;
+  font-size: 0.9375rem;
   line-height: 1.3;
 }
 
 .song-picker__artist {
   color: var(--muted);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   line-height: 1.35;
 }
 
@@ -162,8 +163,8 @@
   gap: 14px;
   margin: 18px 0;
   color: var(--muted);
-  font: 600 0.95rem/1 var(--font-label);
-  letter-spacing: 0.14em;
+  font: 600 0.75rem/1 var(--font-label);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -175,31 +176,31 @@
   background: var(--panel-border);
 }
 
-/* ---- Upload button ---- */
+/* ---- Upload button: a quiet secondary action ---- */
 
 .song-picker__upload {
   width: 100%;
-  min-height: 54px;
+  min-height: 48px;
   padding: 12px 16px;
-  border: 1px dashed var(--panel-border-strong);
-  border-radius: 12px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
-  font: 600 1.05rem/1.2 var(--font-label);
-  letter-spacing: 0.08em;
+  font: 600 0.8125rem/1.2 var(--font-label);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background-color 0.18s var(--ease-out), border-color 0.18s var(--ease-out);
+  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
 }
 
 .song-picker__upload:hover,
 .song-picker__upload:focus-visible {
-  border-color: var(--accent-2);
-  background: rgb(103 232 249 / 0.1);
+  border-color: rgb(255 255 255 / 0.4);
+  background: var(--panel-hover);
 }
 
 .song-picker__upload:active {
-  background: rgb(103 232 249 / 0.18);
+  background: rgb(255 255 255 / 0.1);
 }
 
 @media (prefers-reduced-motion: reduce) {
