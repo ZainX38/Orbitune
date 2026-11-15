@@ -59,10 +59,8 @@
 
 /* ---- The start page ---- */
 
-html:has(body.home) {
-  background: var(--space-bg);
-}
-
+/* No background on <html>: body's background then fills the viewport behind
+   everything, and the starfield and galaxy (negative z-index) paint over it. */
 body.home {
   display: grid;
   place-items: center;
