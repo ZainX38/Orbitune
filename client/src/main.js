@@ -2,6 +2,12 @@
 // starts everything else. (The page's styles are loaded by index.html.)
 import { createSongPicker } from './experience/ui/songPicker.js';
 import { savePlanetJourney } from './experience/planetJourney.js';
+import { savePlanet } from './api/planets.js';
+import { createGalaxy } from './ui/galaxy.js';
+import { createStarfield } from './ui/starfield.js';
+
+createStarfield();
+const galaxy = createGalaxy();
 
 // TEMPORARY: a basic audio player, only here to check that the song picker
 // hands over working audio. Remove it once the real experience plays the song.
@@ -88,6 +94,21 @@ createSongPicker(app, {
         title: song.title,
         artist: song.artist,
       };
+      // Save to MongoDB in the background; a failed save must not block anything.
+      savePlanet({ title: song.title, artist: song.artist, cover: song.cover, deezerId: song.deezerId }, result.audio, result.world)
+        .then(({ id }) => {
+          console.log('Planet saved');
+          // Show the new planet in the galaxy behind the page.
+          galaxy.addPlanet({
+            id,
+            name: result.world.planetName,
+            song: { title: song.title, artist: song.artist },
+            description: [result.world.mood, result.world.biome].filter(Boolean).join(' · '),
+            features: result.audio,
+            blueprint: result.world,
+          });
+        })
+        .catch((err) => console.error('Could not save the planet:', err));
       journeyStatus.textContent = `Your planet “${result.world.planetName}” is ready.`;
       journeyButton.hidden = false;
       console.log('Analysis result:', result);

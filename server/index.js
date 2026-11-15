@@ -8,12 +8,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { analyseAudio } from './analyse.js';
+import { planetsRouter } from './planets.js';
 
 const app = express();
 const envFile = path.join(path.dirname(fileURLToPath(import.meta.url)), '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
-// GET /search?q=daft punk  ÔåÆ  a list of matching songs.
+app.use('/planets', planetsRouter);
+
+// GET /search?q=daft punk  →  a list of matching songs.
 app.get('/search', async (req, res) => {
   // req.query holds everything after the `?` in the address.
   // `?? ''` means "use an empty string if q is missing".

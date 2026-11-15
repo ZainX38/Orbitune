@@ -27,6 +27,7 @@ export default {
       '/audio': 'http://localhost:3000',
       '/analyse': 'http://localhost:3000',
       '/narrate': 'http://localhost:3000',
+      '/planets': 'http://localhost:3000',
     },
   },
 };

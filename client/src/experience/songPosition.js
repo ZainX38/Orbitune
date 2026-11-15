@@ -150,7 +150,7 @@ export function createSongPosition({ audioContext, audioBuffer, features, planet
       listenerTime = planet.timeAt(listenerDirection);
       if (anchor === null) anchor = listenerTime;
       const moved = around(listenerTime - anchor);
-      if (voice && Math.abs(moved) > RESYNC_AFTER && ctx.currentTime - lastJump > MIN_RESYNC_GAP) {
+      if (false && voice && Math.abs(moved) > RESYNC_AFTER && ctx.currentTime - lastJump > MIN_RESYNC_GAP) {
         // Bring the music to the listener, moving it by whole beats so it stays in time
         const shift = Math.round(around(listenerTime - time) / beat) * beat;
         anchor = listenerTime;

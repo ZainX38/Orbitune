@@ -1,14 +1,12 @@
-/* The song picker, drawn as the legend of the survey map.
-   Colours and fonts come from the variables in src/style.css.
-   The heading's style is shared with the map key and lives in style.css too. */
+/* The song picker. Colours and fonts come from the variables in src/style.css.
+   The heading's style lives in style.css too. */
 
 .song-picker {
-  color: var(--ink);
+  color: var(--text);
   font-family: var(--font-text);
 }
 
-/* The picker fades in when JavaScript adds it, so it does not pop into view.
-   It reuses the "print" animation from style.css that inks in the map. */
+/* The picker fades in when JavaScript adds it, so it does not pop into view. */
 @media (prefers-reduced-motion: no-preference) {
   .song-picker {
     animation: print 0.35s var(--ease-out) both;
@@ -22,28 +20,39 @@
   width: 100%;
   margin-top: 16px;
   padding: 14px 16px;
-  border: 2px solid var(--ink);
-  border-radius: 0;
-  background: var(--paper-light);
-  color: var(--ink);
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 12px;
+  background: rgb(5 6 15 / 0.55);
+  color: var(--text);
   font: 400 1.05rem/1.3 var(--font-text);
   appearance: none; /* stops phones adding their own rounded search style */
+  transition: border-color 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out);
 }
 
-/* The small "clear" cross that Chrome and Safari put in search boxes is blue
-   by default. This redraws it in ink so it matches the page. */
+.song-picker__input:hover {
+  border-color: var(--accent);
+}
+
+.song-picker__input:focus-visible {
+  outline: none;
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 3px rgb(103 232 249 / 0.35);
+}
+
+/* The small "clear" cross that Chrome and Safari put in search boxes, redrawn
+   in the page's text colour. */
 .song-picker__input::-webkit-search-cancel-button {
   appearance: none;
   width: 18px;
   height: 18px;
   margin-left: 10px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M3 3l12 12M15 3L3 15' stroke='%231f2227' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M3 3l12 12M15 3L3 15' stroke='%23eef0ff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
     center / contain no-repeat;
   cursor: pointer;
 }
 
 .song-picker__input::placeholder {
-  color: var(--ink-soft);
+  color: var(--muted);
   opacity: 1; /* Firefox fades placeholders by default */
 }
 
@@ -52,12 +61,12 @@
 .song-picker__status {
   min-height: 1.45em; /* keeps the layout still when the message is empty */
   margin: 10px 0;
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 0.9rem;
   line-height: 1.45;
 }
 
-/* ---- Results: each song is a legend entry, with its cover as the swatch ---- */
+/* ---- Results ---- */
 
 .song-picker__results {
   /* About five and a half rows, so the cut-off row shows there is more to scroll. */
@@ -67,16 +76,16 @@
   overflow-y: auto;
   list-style: none;
   scrollbar-width: thin;
-  scrollbar-color: var(--ink) transparent;
+  scrollbar-color: var(--accent) transparent;
 }
 
 /* The rules above and below the list only show when it has songs in it. */
 .song-picker__results:not(:empty) {
-  border-block: 1.5px solid var(--ink);
+  border-block: 1px solid var(--panel-border);
 }
 
 .song-picker__results li + li {
-  border-top: 1px solid var(--rule-soft);
+  border-top: 1px solid var(--panel-border);
 }
 
 .song-picker__row {
@@ -87,7 +96,7 @@
   min-height: 60px;
   padding: 8px 10px;
   border: 0;
-  border-radius: 0;
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -98,11 +107,11 @@
 
 .song-picker__row:hover,
 .song-picker__row:focus-visible {
-  background: var(--mustard);
+  background: var(--panel-hover);
 }
 
 .song-picker__row:active {
-  background: var(--salmon);
+  background: rgb(103 232 249 / 0.16);
 }
 
 /* The list scrolls, so the focus ring is drawn inside the row to avoid
@@ -115,8 +124,9 @@
   flex: none;
   width: 44px;
   height: 44px;
-  border: 1.5px solid var(--ink);
-  background: var(--sea); /* shows if a song has no cover art */
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 6px;
+  background: var(--space-bg-2); /* shows if a song has no cover art */
   object-fit: cover;
 }
 
@@ -139,25 +149,19 @@
 }
 
 .song-picker__artist {
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 0.875rem;
   line-height: 1.35;
 }
 
-/* On a coloured row the grey-green would be too faint, so use full ink. */
-.song-picker__row:hover .song-picker__artist,
-.song-picker__row:focus-visible .song-picker__artist,
-.song-picker__row:active .song-picker__artist {
-  color: var(--ink);
-}
-
-/* ---- "or" divider, with a ruled line on each side ---- */
+/* ---- "or" divider, with a line on each side ---- */
 
 .song-picker__divider {
   display: flex;
   align-items: center;
   gap: 14px;
   margin: 18px 0;
+  color: var(--muted);
   font: 600 0.95rem/1 var(--font-label);
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -168,7 +172,7 @@
   content: '';
   flex: 1;
   height: 1px;
-  background: var(--ink);
+  background: var(--panel-border);
 }
 
 /* ---- Upload button ---- */
@@ -177,27 +181,29 @@
   width: 100%;
   min-height: 54px;
   padding: 12px 16px;
-  border: 1.5px dashed var(--ink);
-  border-radius: 0;
+  border: 1px dashed var(--panel-border-strong);
+  border-radius: 12px;
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font: 600 1.05rem/1.2 var(--font-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background-color 0.18s var(--ease-out);
+  transition: background-color 0.18s var(--ease-out), border-color 0.18s var(--ease-out);
 }
 
 .song-picker__upload:hover,
 .song-picker__upload:focus-visible {
-  background: var(--sea);
+  border-color: var(--accent-2);
+  background: rgb(103 232 249 / 0.1);
 }
 
 .song-picker__upload:active {
-  background: var(--sage);
+  background: rgb(103 232 249 / 0.18);
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .song-picker__input,
   .song-picker__row,
   .song-picker__upload {
     transition: none;
