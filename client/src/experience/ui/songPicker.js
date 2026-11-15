@@ -102,6 +102,7 @@ export function createSongPicker(container, { onSongChosen }) {
         title: song.title,
         artist: song.artist,
         cover: song.cover,
+        deezerId: song.id,
         blob,
       });
     } catch {
