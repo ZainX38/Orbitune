@@ -1,6 +1,6 @@
 // MVP page: a planet made from a song, that reacts to the music, where your position controls the playback.
 //   orbit view -> click the planet to land -> walk (the music follows your longitude) -> Esc back to orbit
-// No server needed: the two demo songs are in public/demo/, analysed in the browser (tempAnalysis.js).
+// Demo songs are analysed in the browser; selected songs use the saved server analysis and blueprint.
 // Run `npm run dev` and open http://localhost:5173/mvp.html
 // Add ?nolock to the URL to test without capturing the mouse (drag to look, click the ground to walk).
 // Keys: F3 = debug overlay, Q = quality low / medium / high (also ?quality=low in the URL).
@@ -11,9 +11,11 @@ import { createPlanet } from '../world/planet.js';
 import { QUALITY, QUALITY_LEVELS, DEFAULT_QUALITY, nextQuality, applyRendererQuality, createAutoQuality } from '../world/quality.js';
 import { createPlayer, PLAYER_SCALE } from '../experience/player.js';
 import { createSongPosition, activeSources } from '../experience/songPosition.js';
+import { getPlanetJourney } from '../experience/planetJourney.js';
 import { createFpsMeter, createDebugOverlay } from './debugOverlay.js';
 import { analyseSong } from './tempAnalysis.js';
 import { DEMO_SONGS, makeBlueprint } from './demoBlueprints.js';
+import { validatePlanetData } from './planetData.js';
 
 // ---------- Settings ----------
 const LAND_TIME = 1.5;      // seconds, orbit -> surface
@@ -119,16 +121,17 @@ const ui = {
     const button = document.createElement('button');
     button.textContent = s.title;
     button.title = `${s.title} by ${s.artist}`;
-    button.addEventListener('click', () => { button.blur(); loadSong(i); });
+    button.dataset.songId = s.id;
+    button.addEventListener('click', () => { button.blur(); loadSong(s); });
     document.getElementById('songs').append(button);
     return button;
   }),
 };
-let hintText = null, timeText = null;
+let hintText = null, timeText = null, loadError = null;
 const clockText = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
 function updateHud() {
-  let hint = HINTS[mode] ?? '';
+  let hint = loadError ?? HINTS[mode] ?? '';
   if (mode === 'orbit' && !music?.playing) hint = HINTS.start;
   if (mode === 'surface' && !player.locked) hint = HINTS.surfaceNoLock;
   if (hint !== hintText) ui.hint.textContent = hintText = hint;
@@ -223,11 +226,14 @@ function onBeat() {
   planet?.onBeat(1);
 }
 
-async function loadSong(index) {
-  const next = DEMO_SONGS[index];
-  if (song === next) return;
+async function loadSong(next, journey = null) {
+  if (song?.id === next.id) return;
+  loadError = null;
   const id = ++loadId;
-  ui.buttons.forEach((b, i) => { b.setAttribute('aria-pressed', i === index); b.disabled = true; });
+  ui.buttons.forEach((button) => {
+    button.setAttribute('aria-pressed', button.dataset.songId === next.id);
+    button.disabled = true;
+  });
   console.log(`[mvp] loading "${next.title}"`);
 
   // Tear down the old world first
@@ -243,14 +249,19 @@ async function loadSong(index) {
   updateHud();
 
   try {
-    if (!analysed.has(next.id)) {
+    if (journey) {
+      const { audio, world } = validatePlanetData(journey);
+      if (!(journey.blob instanceof Blob)) throw new Error('Saved song audio is missing');
+      const audioBuffer = await audioContext.decodeAudioData(await journey.blob.arrayBuffer());
+      analysed.set(next.id, { features: audio, audioBuffer, blueprint: world });
+    } else if (!analysed.has(next.id)) {
       const response = await fetch(next.url);
       if (!response.ok) throw new Error(`${next.url}: ${response.status}`);
       analysed.set(next.id, await analyseSong(await response.arrayBuffer(), audioContext));
     }
     if (id !== loadId) return; // another song was picked meanwhile
-    const { features, audioBuffer } = analysed.get(next.id);
-    const blueprint = makeBlueprint(next.id, features);
+    const { features, audioBuffer, blueprint: savedBlueprint } = analysed.get(next.id);
+    const blueprint = savedBlueprint ?? makeBlueprint(next.id, features);
 
     song = next;
     planet = createPlanet(features, blueprint, { quality });
@@ -278,9 +289,42 @@ async function loadSong(index) {
     fpsMeter.reset(); autoQuality.hold(); // the build and the new shaders say nothing about the frame rate
   } catch (error) {
     console.error('[mvp] could not load the song', error);
-    ui.hint.textContent = hintText = `Could not load "${next.title}" (see the console)`;
+    loadError = `Could not load "${next.title}" (see the console)`;
   } finally {
-    if (id === loadId) ui.buttons.forEach((b) => { b.disabled = false; });
+    if (id === loadId) ui.buttons.forEach((button) => { button.disabled = false; });
+  }
+}
+
+function addJourneyButton(journey) {
+  const next = {
+    id: 'latest-journey',
+    title: journey.title || 'Your song',
+    artist: journey.artist || '',
+  };
+  const button = document.createElement('button');
+  button.textContent = next.title;
+  button.title = next.artist ? `${next.title} by ${next.artist}` : next.title;
+  button.dataset.songId = next.id;
+  button.addEventListener('click', () => { button.blur(); loadSong(next, journey); });
+  ui.buttons.unshift(button);
+  document.getElementById('songs').prepend(button);
+  return next;
+}
+
+async function startExperience() {
+  if (params.get('journey') !== 'latest') {
+    await loadSong(DEMO_SONGS[0]);
+    return;
+  }
+
+  try {
+    const journey = await getPlanetJourney();
+    if (!journey) throw new Error('No saved song journey was found');
+    const next = addJourneyButton(journey);
+    await loadSong(next, journey);
+  } catch (error) {
+    console.error('[mvp] could not open the saved planet', error);
+    loadError = 'Could not load your planet. Please return and try again.';
   }
 }
 
@@ -507,7 +551,7 @@ renderer.setAnimationLoop((now) => {
   overlay.update(now, overlayLines); // after the render, so the triangle count is this frame's
 });
 
-loadSong(0);
+startExperience();
 
 // Handy in the browser console while testing
 window.mvp = {
