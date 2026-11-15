@@ -1,4 +1,7 @@
 import json
+import argparse
+import sys
+from pathlib import Path
 from typing import Literal
 import colorsys
 import librosa
@@ -8,11 +11,7 @@ from google import genai
 from pydantic import BaseModel
 from scipy.signal import find_peaks
 
-import argparse
-from pathlib import Path
-
 load_dotenv(Path(__file__).with_name(".env"))
-client = genai.Client()
 
 NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
@@ -167,6 +166,9 @@ Rules:
 - narratorStyle: one line describing a storyteller's voice.
 Make everything consistent with the music."""
 
+    # The Gemini client is created here, not at the top of the file, so the
+    # audio analysis above still works on a machine that has no API key yet.
+    client = genai.Client()
     response = client.models.generate_content(
         model="gemini-3.5-flash",
         contents=prompt,
@@ -178,13 +180,21 @@ Make everything consistent with the music."""
     return response.parsed.model_dump()
 
 
-############################## test it by running: py analyse.py
+############################## run it with: python analyse.py path/to/song.mp3
+#
+# The Express server (index.js) runs this file once per song and reads what it
+# prints. So the ONLY thing printed to the normal output must be one block of
+# JSON. Anything else (warnings, debug notes) has to go to sys.stderr, or the
+# server will not be able to read the result.
 
 def generate_planet_data(path):
-    return {
-        "world": generate_world(path),
-        "audio": get_audio_data(path),
-    }
+    result = {"audio": get_audio_data(path), "world": None}
+    try:
+        result["world"] = generate_world(path)
+    except Exception as error:
+        result["worldError"] = str(error)
+        print(f"generate_world failed: {error}", file=sys.stderr)
+    return result
 
 
 if __name__ == "__main__":
@@ -209,7 +219,6 @@ if __name__ == "__main__":
     if args.json:
         print(json.dumps(planet_data))
     else:
-        # Keeps the old manual workflow available.
         with open("world.json", "w") as f:
             json.dump(planet_data["world"], f, indent=2)
 
@@ -217,5 +226,3 @@ if __name__ == "__main__":
             json.dump(planet_data["audio"], f, indent=2)
 
         print("Saved world.json and audio.json")
-
-#new

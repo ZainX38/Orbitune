@@ -152,3 +152,8 @@ server/cache/
 
 server/Lib
 server/Scripts
+
+# Design tool working files (kept on this machine only)
+.impeccable/
+DESIGN.md
+PRODUCT.md
